@@ -1,0 +1,4 @@
+position_scale,3.000000
+die_0,0,14
+idle_0,15,29
+run_0,30,44

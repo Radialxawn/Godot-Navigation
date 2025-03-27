@@ -1,0 +1,119 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Navigation"
+run/main_scene="uid://c2u0ss0kaxbw5"
+config/features=PackedStringArray("4.4")
+run/max_fps=72
+
+[autoload]
+
+Global="*res://script/global/Global.gd"
+ThreadManager="*res://script/global/ThreadManager.gd"
+Helper="*res://script/helper/Helper.tscn"
+
+[debug]
+
+gdscript/warnings/untyped_declaration=2
+
+[display]
+
+window/size/viewport_width=540
+window/size/viewport_height=960
+window/size/always_on_top=true
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep_width"
+window/handheld/orientation=1
+
+[editor]
+
+naming/node_name_casing=2
+
+[file_customization]
+
+folder_colors={
+"res://2d/": "teal",
+"res://3d/": "orange",
+"res://fx/": "blue",
+"res://material/": "pink",
+"res://render/": "yellow",
+"res://resource/": "orange",
+"res://scene/": "purple",
+"res://script/": "green",
+"res://shader/": "pink",
+"res://unit/": "red"
+}
+
+[filesystem]
+
+import/blender/enabled=false
+import/fbx/enabled=false
+
+[importer_defaults]
+
+scene={
+"animation/fps": 60.0
+}
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[layer_names]
+
+2d_render/layer_1="GAME"
+3d_render/layer_1="GAME"
+2d_render/layer_2="UI"
+3d_render/layer_2="UI"
+2d_render/layer_3="FX"
+3d_render/layer_3="FX"
+2d_render/layer_4="SELECT"
+3d_render/layer_4="SELECT"
+3d_physics/layer_1="PLAYER"
+3d_navigation/layer_1="PLAYER"
+3d_physics/layer_2="ENEMY"
+3d_navigation/layer_2="ENEMY"
+3d_physics/layer_3="NEUTRAL"
+3d_navigation/layer_3="NEUTRAL"
+3d_physics/layer_4="ENVIRONMENT"
+3d_navigation/layer_4="ENVIRONMENT"
+3d_physics/layer_5="PICKABLE"
+3d_navigation/layer_5="PICKABLE"
+3d_physics/layer_6="VIEW"
+3d_navigation/layer_6="VIEW"
+avoidance/layer_1="PLAYER"
+avoidance/layer_2="ENEMY"
+avoidance/layer_3="NEUTRAL"
+avoidance/layer_4="ENVIRONMENT"
+avoidance/layer_5="PICKABLE"
+avoidance/layer_6="VIEW"
+
+[physics]
+
+common/physics_ticks_per_second=30
+common/max_physics_steps_per_frame=10
+common/physics_jitter_fix=0.0
+3d/default_gravity=20.0
+common/physics_interpolation=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=0
+lights_and_shadows/directional_shadow/16_bits=false
+lights_and_shadows/positional_shadow/atlas_16_bits=false
+anti_aliasing/quality/msaa_3d=2
+anti_aliasing/screen_space_roughness_limiter/enabled=false
+lights_and_shadows/positional_shadow/atlas_size=2048

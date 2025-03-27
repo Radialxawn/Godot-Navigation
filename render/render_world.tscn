@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://d7o26swvj2kq"]
+
+[ext_resource type="Script" uid="uid://c1oq8m5i83fe5" path="res://script/render/render_world.gd" id="1_kfaw8"]
+
+[node name="render_world" type="Node"]
+script = ExtResource("1_kfaw8")
+
+[node name="directional_light" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.5, 0.75, 0.433013, 0, -0.5, 0.866025, 0.866025, -0.433013, -0.25, 0, 0, 0)
+light_energy = 0.1
+shadow_enabled = true
+shadow_opacity = 0.5
+directional_shadow_max_distance = 50.0
+directional_shadow_pancake_size = 0.0

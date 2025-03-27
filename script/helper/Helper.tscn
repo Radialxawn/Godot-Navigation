@@ -1,0 +1,91 @@
+[gd_scene load_steps=15 format=3 uid="uid://comuwmtdh3ujk"]
+
+[ext_resource type="Script" uid="uid://co8v03y520dnw" path="res://script/helper/Helper.gd" id="1_04lu3"]
+[ext_resource type="Shader" uid="uid://gm5l05oohw6c" path="res://shader/spatial_debug/helper_debug_shape.gdshader" id="2_7qd0e"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_f55kp"]
+render_priority = 0
+shader = ExtResource("2_7qd0e")
+
+[sub_resource type="SphereMesh" id="SphereMesh_cha6q"]
+radial_segments = 8
+rings = 4
+
+[sub_resource type="MultiMesh" id="MultiMesh_ajgdn"]
+transform_format = 1
+use_colors = true
+mesh = SubResource("SphereMesh_cha6q")
+
+[sub_resource type="SphereMesh" id="SphereMesh_gop1w"]
+radial_segments = 16
+rings = 8
+
+[sub_resource type="MultiMesh" id="MultiMesh_ueo77"]
+transform_format = 1
+use_colors = true
+mesh = SubResource("SphereMesh_gop1w")
+
+[sub_resource type="SphereMesh" id="SphereMesh_f55kp"]
+radial_segments = 32
+rings = 16
+
+[sub_resource type="MultiMesh" id="MultiMesh_4to0f"]
+transform_format = 1
+use_colors = true
+mesh = SubResource("SphereMesh_f55kp")
+
+[sub_resource type="SphereMesh" id="SphereMesh_7qd0e"]
+
+[sub_resource type="MultiMesh" id="MultiMesh_04lu3"]
+transform_format = 1
+use_colors = true
+mesh = SubResource("SphereMesh_7qd0e")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_7qd0e"]
+render_priority = 0
+shader = ExtResource("2_7qd0e")
+
+[sub_resource type="BoxMesh" id="BoxMesh_f55kp"]
+
+[sub_resource type="MultiMesh" id="MultiMesh_r218t"]
+transform_format = 1
+use_colors = true
+mesh = SubResource("BoxMesh_f55kp")
+
+[node name="Helper" type="Node"]
+script = ExtResource("1_04lu3")
+
+[node name="debug_shape_sphere_8" type="MultiMeshInstance3D" parent="."]
+physics_interpolation_mode = 2
+material_overlay = SubResource("ShaderMaterial_f55kp")
+cast_shadow = 0
+ignore_occlusion_culling = true
+multimesh = SubResource("MultiMesh_ajgdn")
+
+[node name="debug_shape_sphere_16" type="MultiMeshInstance3D" parent="."]
+physics_interpolation_mode = 2
+material_overlay = SubResource("ShaderMaterial_f55kp")
+cast_shadow = 0
+ignore_occlusion_culling = true
+multimesh = SubResource("MultiMesh_ueo77")
+
+[node name="debug_shape_sphere_32" type="MultiMeshInstance3D" parent="."]
+physics_interpolation_mode = 2
+material_overlay = SubResource("ShaderMaterial_f55kp")
+cast_shadow = 0
+ignore_occlusion_culling = true
+multimesh = SubResource("MultiMesh_4to0f")
+
+[node name="debug_shape_sphere_64" type="MultiMeshInstance3D" parent="."]
+physics_interpolation_mode = 2
+material_overlay = SubResource("ShaderMaterial_f55kp")
+cast_shadow = 0
+ignore_occlusion_culling = true
+multimesh = SubResource("MultiMesh_04lu3")
+
+[node name="debug_shape_line" type="MultiMeshInstance3D" parent="."]
+physics_interpolation_mode = 2
+material_overlay = SubResource("ShaderMaterial_7qd0e")
+cast_shadow = 0
+ignore_occlusion_culling = true
+multimesh = SubResource("MultiMesh_r218t")

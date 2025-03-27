@@ -1,0 +1,195 @@
+[gd_scene load_steps=19 format=3 uid="uid://c2u0ss0kaxbw5"]
+
+[ext_resource type="Script" uid="uid://b1565sp3gmmth" path="res://navigation/navigation.gd" id="1_5q35k"]
+[ext_resource type="Shader" uid="uid://d0scbof4m78iy" path="res://shader/spatial_debug/flow_field_agent.gdshader" id="2_moll0"]
+[ext_resource type="PackedScene" uid="uid://c38cb1hjopv17" path="res://3d/creep/creep_1.glb" id="3_avam6"]
+[ext_resource type="Texture2D" uid="uid://6na4m5yeal10" path="res://3d/creep/creep_1_action.exr" id="3_yuw3b"]
+[ext_resource type="Texture2D" uid="uid://bs2rpevrikdmo" path="res://2d/albedo.png" id="4_qcdcr"]
+
+[sub_resource type="Environment" id="Environment_h3ye5"]
+background_mode = 1
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.5
+tonemap_mode = 4
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jfo2b"]
+render_priority = 0
+shader = ExtResource("2_moll0")
+shader_parameter/texture_albedo = ExtResource("4_qcdcr")
+shader_parameter/action = ExtResource("3_yuw3b")
+shader_parameter/position_scale = 3.0
+
+[sub_resource type="MultiMesh" id="MultiMesh_yuw3b"]
+transform_format = 1
+use_colors = true
+use_custom_data = true
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_moll0"]
+size = Vector3(1, 0.3, 2.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_yuw3b"]
+size = Vector3(1, 0.3, 2.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_yuw3b"]
+size = Vector3(0.5, 0.3, 1.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_qcdcr"]
+size = Vector3(0.5, 0.3, 1.5)
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_yuw3b"]
+radius = 0.75
+
+[sub_resource type="SphereMesh" id="SphereMesh_jfo2b"]
+radius = 0.75
+height = 0.75
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_qcdcr"]
+radius = 1.5
+
+[sub_resource type="SphereMesh" id="SphereMesh_7sxkd"]
+radius = 1.5
+height = 1.5
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_moll0"]
+radius = 1.25
+
+[sub_resource type="SphereMesh" id="SphereMesh_epcev"]
+radius = 1.25
+height = 1.25
+
+[node name="navigation" type="Node"]
+script = ExtResource("1_5q35k")
+
+[node name="directional_light" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.605988, -0.653202, 0.453988, 0, 0.570714, 0.821149, -0.795474, 0.497607, -0.345846, 0, 0, 0)
+shadow_enabled = true
+shadow_opacity = 0.5
+
+[node name="ui" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="background" type="ColorRect" parent="ui"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -80.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="manual_camera" type="Label" parent="ui"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = -76.0
+offset_right = 534.0
+offset_bottom = -59.0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 12
+text = "Scroll to zoom camera."
+
+[node name="manual_flow_field" type="Label" parent="ui"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = -57.0
+offset_right = 534.0
+offset_bottom = -40.0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 12
+text = "Middle click/drag to set wall, right click to set destination, press V to show/hide vector."
+
+[node name="manual_boid" type="Label" parent="ui"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = -38.0
+offset_right = 467.0
+offset_bottom = -21.0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 12
+text = "Left click to spawn %d agent, press C to change spawn count, right click to move."
+
+[node name="debug" type="Label" parent="ui"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = -20.0
+offset_right = 59.0
+offset_bottom = -3.0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 12
+text = "FPS: 69"
+
+[node name="camera" type="Camera3D" parent="."]
+physics_interpolation_mode = 2
+transform = Transform3D(0.866025, 0.433013, -0.25, 0, 0.5, 0.866025, 0.5, -0.75, 0.433013, -2.11219, 7.31683, 3.65842)
+environment = SubResource("Environment_h3ye5")
+projection = 1
+current = true
+size = 12.0
+far = 100.0
+
+[node name="view_agents" type="MultiMeshInstance3D" parent="."]
+physics_interpolation_mode = 2
+material_override = SubResource("ShaderMaterial_jfo2b")
+multimesh = SubResource("MultiMesh_yuw3b")
+
+[node name="creep_1" parent="view_agents" instance=ExtResource("3_avam6")]
+visible = false
+
+[node name="obstacles" type="Area3D" parent="."]
+
+[node name="box_1" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(-0.258819, 0, 0.965926, 0, 1, 0, -0.965926, 0, -0.258819, -1.3, 0.15, -3.2)
+shape = SubResource("BoxShape3D_moll0")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/box_1"]
+mesh = SubResource("BoxMesh_yuw3b")
+
+[node name="box_2" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(0.866025, 0, -0.5, 0, 1, 0, 0.5, 0, 0.866025, -1.7, 0.15, -0.8)
+shape = SubResource("BoxShape3D_yuw3b")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/box_2"]
+mesh = SubResource("BoxMesh_qcdcr")
+
+[node name="sphere_1" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+shape = SubResource("SphereShape3D_yuw3b")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/sphere_1"]
+mesh = SubResource("SphereMesh_jfo2b")
+
+[node name="sphere_2" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 2.5)
+shape = SubResource("SphereShape3D_qcdcr")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/sphere_2"]
+mesh = SubResource("SphereMesh_7sxkd")
+
+[node name="sphere_3" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5, 0, 3.5)
+shape = SubResource("SphereShape3D_moll0")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/sphere_3"]
+mesh = SubResource("SphereMesh_epcev")
