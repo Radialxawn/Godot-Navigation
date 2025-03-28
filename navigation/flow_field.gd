@@ -214,6 +214,7 @@ class Agent extends RefCounted:
 	var rotation_speed_max: float
 	var force_obstacle: Vector2
 	var force_other: Vector2
+	var velocity: Vector2
 	var speed_factor: float
 	var move_distance: float
 	var target: Vector2
@@ -394,30 +395,42 @@ static func agent_avoid_obstacle(_agent_: Agent, _flow_field_: FlowField, _dt_: 
 		for neighbor_index: int in _agent_.cell.neighbors:
 			var neighbor := _flow_field_.cell_get(neighbor_index)
 			for obstacle: Obstacle in neighbor.obstacles:
-				obstacle.calculate_distance(_agent_.position_next, _agent_.radius, distance_hits)
+				obstacle.calculate_distance(_agent_.position, _agent_.radius, distance_hits)
 	var force_obstacle := Vector2.ZERO
 	for hit: DistanceHit in distance_hits:
 		force_obstacle -= hit.normal * hit.distance;
+	var field_l := _flow_field_.bound.limit_min.x - (_agent_.position.x - _agent_.radius)
+	var field_r := _flow_field_.bound.limit_max.x - (_agent_.position.x + _agent_.radius)
+	var field_b := _flow_field_.bound.limit_min.y - (_agent_.position.y - _agent_.radius)
+	var field_t := _flow_field_.bound.limit_max.y - (_agent_.position.y + _agent_.radius)
+	if field_l >= 0.0:
+		force_obstacle.x += field_l
+	if field_r <= 0.0:
+		force_obstacle.x += field_r
+	if field_b >= 0.0:
+		force_obstacle.y += field_b
+	if field_t <= 0.0:
+		force_obstacle.y += field_t
+	#currently check against the flow field limit will cause problem when navigate near the limit because it may move against the target direction
 	_agent_.force_obstacle = force_obstacle
 
 static func agent_avoid_other(_agent_: Agent, _flow_field_: FlowField, _dt_: float) -> void:
-	if _agent_.cell == null:
-		return
+	#calculate agent force other and check if it is surronded
+	#predict nearby agent next position with velocity and calculate the approximate avoid direction that nearest to target position
+	#prevent other agents from pushing this agent into the obstacle, if they tend to do so, give force obstacle back to other agent.force_other
 	var force_other := Vector2.ZERO
 	var agent_neighbors := _flow_field_.agent_neighbors_get(_agent_)
 	for agent_other: Agent in agent_neighbors:
-		var delta := agent_other.position - _agent_.position
+		var delta := agent_other.position - _agent_.position + (agent_other.velocity - _agent_.velocity) * _dt_
 		var delta_length_sq := delta.length_squared()
 		var delta_length_min := _agent_.radius + agent_other.radius
 		if delta_length_sq < delta_length_min * delta_length_min:
 			var delta_length := sqrt(delta_length_sq)
-			var hit_distance := delta_length_min - delta_length
+			var hit_distance := (delta_length_min - delta_length)
 			if delta_length < 1e-3:
 				force_other -= hit_distance * Vector2.from_angle(_agent_.rotation)
 			else:
 				force_other -= (hit_distance / delta_length) * delta
-			if _agent_.target_ing and agent_other.target_ing and _agent_.target.distance_squared_to(agent_other.target) < 1e-6:
-				pass
 	_agent_.force_other = force_other
 
 static func agent_move(_agent_: Agent, _flow_field_: FlowField, _dt_: float) -> void:
@@ -426,8 +439,8 @@ static func agent_move(_agent_: Agent, _flow_field_: FlowField, _dt_: float) -> 
 		var delta := _agent_.target - _agent_.position
 		var delta_length := delta.length()
 		if delta_length > 1e-3:
-			var near_factor := minf(delta_length * 1e1, 1.0)
-			force_move = (delta / sqrt(delta_length)) * _agent_.position_speed_max * near_factor
+			var position_speed_max := minf(delta_length * _agent_.position_speed_max * 10.0, _agent_.position_speed_max)
+			force_move = (delta / sqrt(delta_length)) * position_speed_max
 			_agent_.speed_factor += _dt_
 	else:
 		_agent_.speed_factor -= _dt_
@@ -448,11 +461,15 @@ static func agent_move(_agent_: Agent, _flow_field_: FlowField, _dt_: float) -> 
 	var delta_rotation_target := direction_face.angle_to(force)
 	var rotation_sign := signf(delta_rotation_target)
 	var delta_rotation := _agent_.rotation_speed_max * dt
+	#select the turn direction that does not move into the obstacle
+	#if _agent_.force_obstacle.length_squared() > 0.0:
+		#pass
 	var rotation_next := wrapf(_agent_.rotation + rotation_sign * minf(delta_rotation, rotation_sign * delta_rotation_target), -PI, PI)
-	var delta_position := Vector2.from_angle(rotation_next) * (force_magnitude * dt)
+	var direction_next := Vector2.from_angle(rotation_next)
+	_agent_.velocity = direction_next * force_magnitude
 	_agent_.rotation = rotation_next
-	_agent_.position_next = _flow_field_.clamp_position(_agent_.position + delta_position)
-	_agent_.move_distance += (_agent_.position_next - _agent_.position).length()
+	_agent_.position_next = _flow_field_.clamp_position(_agent_.position + _agent_.velocity * dt)
+	_agent_.move_distance += _agent_.position.distance_to(_agent_.position_next)
 #endregion
 
 #region debug
