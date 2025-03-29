@@ -1,7 +1,7 @@
 [gd_scene load_steps=11 format=4 uid="uid://dq17x5845ivwu"]
 
-[ext_resource type="Script" uid="uid://c7q157alxrd6q" path="res://navigation/flow_field.gd" id="1_ku6lw"]
-[ext_resource type="Shader" uid="uid://g231hm7jjur8" path="res://shader/spatial_debug/flow_field_cell.gdshader" id="2_fcehf"]
+[ext_resource type="Script" uid="uid://c7q157alxrd6q" path="res://navigation/navigation_field.gd" id="1_ku6lw"]
+[ext_resource type="Shader" uid="uid://g231hm7jjur8" path="res://shader/spatial_debug/navigation_debug_cell.gdshader" id="2_fcehf"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_wn5i3"]
 render_priority = 0
@@ -65,7 +65,7 @@ use_colors = true
 use_custom_data = true
 mesh = SubResource("ArrayMesh_aqpdh")
 
-[node name="flow_field" type="Node3D"]
+[node name="navigation_field" type="Node3D"]
 script = ExtResource("1_ku6lw")
 metadata/_custom_type_script = "uid://c7q157alxrd6q"
 

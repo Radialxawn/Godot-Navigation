@@ -8,6 +8,8 @@ render_priority = 0
 shader = ExtResource("2_7qd0e")
 
 [sub_resource type="SphereMesh" id="SphereMesh_cha6q"]
+radius = 1.0
+height = 2.0
 radial_segments = 8
 rings = 4
 
@@ -17,6 +19,8 @@ use_colors = true
 mesh = SubResource("SphereMesh_cha6q")
 
 [sub_resource type="SphereMesh" id="SphereMesh_gop1w"]
+radius = 1.0
+height = 2.0
 radial_segments = 16
 rings = 8
 
@@ -26,6 +30,8 @@ use_colors = true
 mesh = SubResource("SphereMesh_gop1w")
 
 [sub_resource type="SphereMesh" id="SphereMesh_f55kp"]
+radius = 1.0
+height = 2.0
 radial_segments = 32
 rings = 16
 
@@ -35,6 +41,8 @@ use_colors = true
 mesh = SubResource("SphereMesh_f55kp")
 
 [sub_resource type="SphereMesh" id="SphereMesh_7qd0e"]
+radius = 1.0
+height = 2.0
 
 [sub_resource type="MultiMesh" id="MultiMesh_04lu3"]
 transform_format = 1

@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://cw2v0kwv8vxq1"
-path="res://.godot/imported/vector.glb-8fc9ada784e9d32c606e00f243440f99.scn"
+path="res://.godot/imported/navigation_vector.glb-8bebe676e5397cb2e1e2496615ea4183.scn"
 
 [deps]
 
-source_file="res://navigation/vector.glb"
-dest_files=["res://.godot/imported/vector.glb-8fc9ada784e9d32c606e00f243440f99.scn"]
+source_file="res://navigation/navigation_vector.glb"
+dest_files=["res://.godot/imported/navigation_vector.glb-8bebe676e5397cb2e1e2496615ea4183.scn"]
 
 [params]
 

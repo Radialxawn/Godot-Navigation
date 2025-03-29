@@ -1,7 +1,7 @@
 [gd_scene load_steps=19 format=3 uid="uid://c2u0ss0kaxbw5"]
 
 [ext_resource type="Script" uid="uid://b1565sp3gmmth" path="res://navigation/navigation.gd" id="1_5q35k"]
-[ext_resource type="Shader" uid="uid://d0scbof4m78iy" path="res://shader/spatial_debug/flow_field_agent.gdshader" id="2_moll0"]
+[ext_resource type="Shader" uid="uid://d0scbof4m78iy" path="res://shader/spatial_debug/navigation_debug_agent.gdshader" id="2_moll0"]
 [ext_resource type="PackedScene" uid="uid://c38cb1hjopv17" path="res://3d/creep/creep_1.glb" id="3_avam6"]
 [ext_resource type="Texture2D" uid="uid://6na4m5yeal10" path="res://3d/creep/creep_1_action.exr" id="3_yuw3b"]
 [ext_resource type="Texture2D" uid="uid://bs2rpevrikdmo" path="res://2d/albedo.png" id="4_qcdcr"]
@@ -96,7 +96,7 @@ offset_bottom = -59.0
 grow_vertical = 0
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 12
-text = "Scroll to zoom camera."
+text = "Scroll to zoom camera, press B to change view."
 
 [node name="manual_flow_field" type="Label" parent="ui"]
 layout_mode = 1
@@ -112,7 +112,7 @@ theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 12
 text = "Middle click/drag to set wall, right click to set destination, press V to show/hide vector."
 
-[node name="manual_boid" type="Label" parent="ui"]
+[node name="manual_agent" type="Label" parent="ui"]
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
@@ -124,7 +124,7 @@ offset_bottom = -21.0
 grow_vertical = 0
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 12
-text = "Left click to spawn %d agent, press C to change spawn count, right click to move."
+text = "Left click spawn %d agent, press C change spawn count, right click move, S change agent."
 
 [node name="debug" type="Label" parent="ui"]
 layout_mode = 1

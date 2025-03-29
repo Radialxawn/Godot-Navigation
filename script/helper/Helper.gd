@@ -44,7 +44,7 @@ func _process(_dt_: float) -> void:
 	_debug_shape_line.draw()
 
 func debug_draw_sphere(_position_: Vector3, _radius_: float, _color_: Color) -> void:
-	var debug_shape_sphere := _debug_shape_spheres[clampi(int(_radius_ / 0.25), 0, _debug_shape_spheres.size() - 1)]
+	var debug_shape_sphere := _debug_shape_spheres[clampi(int(_radius_ / 0.125), 0, _debug_shape_spheres.size() - 1)]
 	debug_shape_sphere.transforms.append(Transform3D.IDENTITY
 		.translated(_position_)
 		.scaled_local(Vector3(_radius_, _radius_, _radius_))
