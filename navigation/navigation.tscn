@@ -12,6 +12,7 @@ ambient_light_source = 2
 ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 0.5
 tonemap_mode = 4
+glow_enabled = true
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_jfo2b"]
 render_priority = 0
@@ -98,7 +99,7 @@ theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 12
 text = "Scroll to zoom camera, press B to change view."
 
-[node name="manual_flow_field" type="Label" parent="ui"]
+[node name="manual_field" type="Label" parent="ui"]
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
@@ -124,7 +125,7 @@ offset_bottom = -21.0
 grow_vertical = 0
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 12
-text = "Left click spawn %d agent, press C change spawn count, right click move, S change agent."
+text = "Left click spawn %d (C to change), right click move, S change agent, D kill %d agent."
 
 [node name="debug" type="Label" parent="ui"]
 layout_mode = 1
@@ -141,7 +142,6 @@ theme_override_font_sizes/font_size = 12
 text = "FPS: 69"
 
 [node name="camera" type="Camera3D" parent="."]
-physics_interpolation_mode = 2
 transform = Transform3D(0.866025, 0.433013, -0.25, 0, 0.5, 0.866025, 0.5, -0.75, 0.433013, -2.11219, 7.31683, 3.65842)
 environment = SubResource("Environment_h3ye5")
 projection = 1
@@ -150,7 +150,6 @@ size = 12.0
 far = 100.0
 
 [node name="view_agents" type="MultiMeshInstance3D" parent="."]
-physics_interpolation_mode = 2
 material_override = SubResource("ShaderMaterial_jfo2b")
 multimesh = SubResource("MultiMesh_yuw3b")
 

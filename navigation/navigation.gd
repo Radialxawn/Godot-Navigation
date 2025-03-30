@@ -53,6 +53,8 @@ class SelfMouse extends RefCounted:
 	var middle_cell_index_last: int
 	var spawn_count: int
 	var agent_index: int
+	func _init() -> void:
+		agent_index = -1
 var _self_mouse: SelfMouse
 
 func _ready() -> void:
@@ -77,23 +79,68 @@ func _ready() -> void:
 	_navigation_field.debug_update(true, _navigation_field_debug_vector)
 	_input_ready = true
 
-func _agents_spawn(_count_: int) -> void:
+func _agents_spawn_task(_count_: int) -> void:
 	for i in _count_:
 		_agents.append(NavigationField.Agent.new())
 		_agents_local.append(NavigationField.Agent.new())
+
+func _agents_spawn(_position_local_: Vector2, _count_: int) -> void:
+	var spawn_count := _self_mouse.spawn_count
+	var spread := ceili(sqrt(spawn_count))
+	var task := ThreadManager.do(self, _agents_spawn_task.bind(_count_), true)
+	if task != null:
+		print("Spawn %d agent." % [_count_])
+		await task.done
+		_view_agents.multimesh.instance_count = _agents.size()
+		_view_agents.multimesh.visible_instance_count = _agents.size()
+		for i in spawn_count:
+			var agent_index := _agents.size() - 1 - i
+			var agent := _agents[agent_index]
+			agent.index = agent_index
+			agent.radius = randi_range(40, 50) * 0.005
+			@warning_ignore("integer_division")
+			agent.position = Vector2(
+				_position_local_.x + (i / spread) * 0.3,
+				_position_local_.y + (i % spread) * 0.3
+			)
+			agent.position_speed_max = randi_range(20, 30) * 0.1
+			agent.rotation_speed_max = randi_range(20, 30) * 0.1 * PI
+			agent.acceleration = randi_range(15, 20) * 0.1
+			_agents_local[agent_index].copy_stat(agent)
+			_agents_local[agent_index].copy_transform(agent)
+
+func _agents_kill_task(_count_: int) -> void:
+	for i in range(_agents_local.size() - 1, _agents_local.size() - 1 - _count_, -1):
+		NavigationField.agent_exit(_agents[i], _navigation_field.cell_grid)
+		_agents.remove_at(i)
+		_agents_local.remove_at(i)
+
+func _agents_kill(_count_: int) -> void:
+	_count_ = mini(_count_, _agents_local.size())
+	if _count_ == 0:
+		return
+	var count_after := _agents_local.size() - _count_
+	var task := ThreadManager.do(self, _agents_kill_task.bind(_count_), true)
+	if task != null:
+		print("Kill %d agent." % [_count_])
+		_view_agents.multimesh.instance_count = count_after
+		await task.done
+		_view_agents.multimesh.visible_instance_count = _agents.size()
 
 func _agents_process(_dt_: float) -> void:
 	var cell_grid := _navigation_field.cell_grid
 	for agent in _agents:
 		NavigationField.agent_enter(agent, cell_grid)
-		NavigationField.agent_force_move(agent, cell_grid, _dt_)
+		NavigationField.agent_force_move(agent, _dt_)
 		NavigationField.agent_force_obstacle(cell_grid, _agents, agent.index, _obstacles, _dt_)
+	for agent in _agents:
 		NavigationField.agent_force_other(cell_grid, _agents, agent.index, _dt_)
-		#NavigationField.agent_move(agent, cell_grid, _dt_)
+		NavigationField.agent_move(agent, cell_grid, _dt_)
 
 func _physics_process(_dt_: float) -> void:
 	_self_camera.physics_process(_dt_)
 	if _agents_local.size() == _view_agents.multimesh.instance_count:
+		var time_sec := Global.time_sec()
 		var tf_base := Transform3D.IDENTITY.translated_local(_navigation_field.position)
 		for i in _agents_local.size():
 			var agent_local := _agents_local[i]
@@ -103,9 +150,12 @@ func _physics_process(_dt_: float) -> void:
 				.rotated_local(Vector3.UP, -agent_local.rotation + PI * 0.5)
 				.scaled_local(Vector3(view_radius, view_radius, view_radius))
 			)
+			var gray := 1.0 if i == _self_mouse.agent_index else 0.0
+			var flick := pingpong(time_sec, 0.5) if i == _self_mouse.agent_index else 0.0
+			var gray_flick := gray + flick
 			_view_agents.multimesh.set_instance_transform(i, tf)
 			_view_agents.multimesh.set_instance_custom_data(i,
-				Color(wrapf(agent_local.move_distance * 15.0 / agent_local.radius, 30.0, 44.0), wrapi(i, 0, 16) * 0.0625, 0.0)
+				Color(wrapf(agent_local.move_distance * 7.5 / agent_local.radius, 30.0, 44.0), wrapi(i, 0, 16) * 0.0625, gray_flick)
 			)
 	if ThreadManager.doable(self):
 		if _physics_time_sec_last == 0.0:
@@ -145,7 +195,7 @@ func _input_change_spawn_count() -> void:
 			count_index = (i + 1) % counts.size()
 			break;
 	_self_mouse.spawn_count = counts[count_index]
-	_manual_agent.text = _manual_boid_text_base % _self_mouse.spawn_count
+	_manual_agent.text = _manual_boid_text_base % [_self_mouse.spawn_count, _self_mouse.spawn_count]
 
 func _input_middle_mouse() -> void:
 	if _self_mouse.middle_press_ing:
@@ -176,6 +226,8 @@ func _input(_event_: InputEvent) -> void:
 		if key.is_released() and key.keycode == KEY_S:
 			if _agents_local.size() > 0:
 				_self_mouse.agent_index = (_self_mouse.agent_index + 1) % _agents_local.size()
+		if key.is_released() and key.keycode == KEY_D:
+			_agents_kill(_self_mouse.spawn_count)
 	if _event_ is InputEventMouseButton or _event_ is InputEventMouseMotion:
 		_self_mouse.position = (_event_ as InputEventMouse).position
 		_self_mouse.position_world = _position_get(_self_camera.camera, _self_mouse.position)
@@ -188,10 +240,14 @@ func _input(_event_: InputEvent) -> void:
 			match mouse.button_index:
 				MOUSE_BUTTON_RIGHT:
 					for agent_local in _agents_local:
-						if agent_local.index == _self_mouse.agent_index:
+						if _self_mouse.agent_index != -1:
+							if agent_local.index == _self_mouse.agent_index:
+								agent_local.target = p_local
+								agent_local.target_ing = true
+								break
+						else:
 							agent_local.target = p_local
 							agent_local.target_ing = true
-							break
 					var cell := _navigation_field.cell_grid.cell_nearest_get(p_local)
 					if cell == null or cell.cost == NavigationField.Cell.Cost.WALL:
 						return
@@ -204,25 +260,7 @@ func _input(_event_: InputEvent) -> void:
 					_self_mouse.middle_press_ing = true
 					_input_middle_mouse()
 				MOUSE_BUTTON_LEFT:
-					var spawn_count := _self_mouse.spawn_count
-					var spread := ceili(sqrt(spawn_count))
-					var task := ThreadManager.do(self, _agents_spawn.bind(spawn_count), true)
-					if task != null:
-						await task.done
-						_view_agents.multimesh.instance_count = _agents.size()
-						for i in spawn_count:
-							var agent_index := _agents.size() - 1 - i
-							var agent := _agents[agent_index]
-							agent.index = agent_index
-							agent.radius = randi_range(40, 50) * 0.005
-							agent.radius_other = agent.radius * 2.0
-							@warning_ignore("integer_division")
-							agent.position = Vector2(p_local.x + (i / spread) * 0.3, p_local.y + (i % spread) * 0.3)
-							agent.position_speed_max = randi_range(20, 30) * 0.1
-							agent.rotation_speed_max = randi_range(20, 30) * 0.1 * PI
-							agent.acceleration = randi_range(15, 20) * 0.1
-							_agents_local[agent_index].copy_stat(agent)
-							_agents_local[agent_index].copy_transform(agent)
+					_agents_spawn(p_local, _self_mouse.spawn_count)
 				MOUSE_BUTTON_WHEEL_UP:
 					_self_camera.size_target = clampf(_self_camera.camera.size - 2.0, 8.0, 35.0)
 				MOUSE_BUTTON_WHEEL_DOWN:

@@ -217,7 +217,6 @@ func position_set(_position_: Vector3, _anchor_: Vector2) -> void:
 class Agent extends RefCounted:
 	var index: int
 	var radius: float
-	var radius_other: float
 	var position: Vector2
 	var position_predict: Vector2
 	var position_speed_max: float
@@ -226,7 +225,6 @@ class Agent extends RefCounted:
 	var rotation_speed_max: float
 	var acceleration: float
 	var force_obstacle: Vector2
-	var force_other: Vector2
 	var speed_factor: float
 	var move_distance: float
 	var target: Vector2
@@ -243,7 +241,6 @@ class Agent extends RefCounted:
 	func copy_stat(_from_: Agent) -> void:
 		index = _from_.index
 		radius = _from_.radius
-		radius_other = _from_.radius_other
 		position_speed_max = _from_.position_speed_max
 		rotation_speed_max = _from_.rotation_speed_max
 		acceleration = _from_.acceleration
@@ -283,6 +280,8 @@ class Obstacle extends RefCounted:
 		elif cpl.y > rsh.y:
 			tpl.y = rsh.y
 		return cpl.distance_squared_to(tpl) <= _cr_ * _cr_
+	static func capsule_rectangle_overlap(_cp_: Vector2, _cr_: float, _ch_: float, _rp_: Vector2, _rs_: Vector2) -> bool:
+		return false
 	static func rectangle_rectangle_overlap(_ap_: Vector2, _as_: Vector2, _ar_: float,
 											_bp_: Vector2, _bs_: Vector2, _br_: float) -> bool:
 		var ash := _as_ * 0.5
@@ -339,6 +338,21 @@ class ObstacleCircle extends Obstacle:
 			distance_hit.distance = sqrt(delta_length_sq) - delta_length_min
 			distance_hit.normal = delta.normalized()
 			return true
+		return false
+
+class ObstacleCapsule extends Obstacle:
+	var radius: float
+	var height: float
+	func _init(_index_: int, _flow_field_: NavigationField, _collider_: CollisionShape3D) -> void:
+		super._init(_index_, _flow_field_, _collider_)
+		var sphere := _collider_.shape as SphereShape3D
+		radius = sphere.radius
+		for cell_index in cells_index:
+			var cell := _flow_field_.cell_grid.cell_get(cell_index)
+			if Obstacle.capsule_rectangle_overlap(position, radius, height, cell.position, _flow_field_.cell_grid.cell_size):
+				cell.obstacles_index.append(index)
+				cell.cost = Cell.Cost.WALL
+	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
 		return false
 
 class ObstacleRectangle extends Obstacle:
@@ -409,6 +423,10 @@ static func agent_neighbors_index_get(_cell_grid_: CellGrid, _agents_: Array[Age
 				index += 1
 	return index
 
+static func agent_exit(_agent_: Agent, _cell_grid_: CellGrid) -> void:
+	if _agent_.cell_index != -1:
+		_cell_grid_.cell_get(_agent_.cell_index).agents_index.erase(_agent_.index)
+
 static func agent_enter(_agent_: Agent, _cell_grid_: CellGrid) -> void:
 	var cell_index := _cell_grid_.cell_index_nearest_get(_agent_.position)
 	if cell_index != _agent_.cell_index:
@@ -418,7 +436,7 @@ static func agent_enter(_agent_: Agent, _cell_grid_: CellGrid) -> void:
 		if cell_index != -1:
 			_cell_grid_.cell_get(cell_index).agents_index.append(_agent_.index)
 
-static func agent_force_move(_agent_: Agent, _cell_grid_: CellGrid, _dt_: float) -> void:
+static func agent_force_move(_agent_: Agent, _dt_: float) -> void:
 	var force_move := Vector2.ZERO
 	if _agent_.target_ing:
 		var delta := _agent_.target - _agent_.position
@@ -437,7 +455,7 @@ static func agent_force_move(_agent_: Agent, _cell_grid_: CellGrid, _dt_: float)
 	var rotation_predict := wrapf(_agent_.rotation + delta_rotation_real, -PI, PI)
 	var position_predict := _agent_.position + Vector2.from_angle(rotation_predict) * (force_move.length() * dt)
 	_agent_.rotation_predict = rotation_predict
-	_agent_.position_predict = _cell_grid_.clamp_position(position_predict)
+	_agent_.position_predict = position_predict
 
 static func agent_force_obstacle(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int, _obstacles_: Array[Obstacle], _dt_: float) -> void:
 	var agent := _agents_[_agent_index_]
@@ -473,9 +491,8 @@ static func agent_force_obstacle(_cell_grid_: CellGrid, _agents_: Array[Agent], 
 		agent.rotation_predict = (agent.position_predict - agent.position).angle()
 
 static func agent_force_other(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int, _dt_: float) -> void:
-	#calculate agent force other and check if it is surronded
-	#predict nearby agent next position with velocity and calculate the approximate avoid direction that nearest to target position
-	#prevent other agents from pushing this agent into the obstacle, if they tend to do so, give force obstacle back to other agent.force_other
+	#circle cast from postion to position predict
+	#circle cast other agent to find possible movement
 	var force_other := Vector2.ZERO
 	var agent := _agents_[_agent_index_]
 	var neighbors_count := agent_neighbors_index_get(_cell_grid_, _agents_, _agent_index_)
@@ -483,44 +500,30 @@ static func agent_force_other(_cell_grid_: CellGrid, _agents_: Array[Agent], _ag
 		var agent_other := _agents_[agent.neighbors_index[i]]
 		var delta := agent_other.position_predict - agent.position_predict
 		var delta_length_sq := delta.length_squared()
-		var delta_length_min := agent.radius_other + agent_other.radius_other
+		var delta_length_min := agent.radius + agent_other.radius
 		if delta_length_sq < delta_length_min * delta_length_min:
 			var delta_length := sqrt(delta_length_sq)
-			var hit_distance := (delta_length_min - delta_length)
+			var hit_distance := (delta_length_min - delta_length) * 0.5
 			if delta_length < 1e-3:
 				force_other -= hit_distance * Vector2.from_angle(agent.rotation)
 			else:
 				force_other -= (hit_distance / delta_length) * delta
-	agent.force_other = force_other
-	#test
-	agent.move_distance += agent.position.distance_to(agent.position_predict)
-	agent.rotation = agent.rotation_predict
-	agent.position = agent.position_predict
-	#test
+	if agent.force_obstacle.length_squared() > 0.0:
+		if force_other.dot(agent.force_obstacle) < 0.0:
+			var u := agent.force_obstacle.normalized()
+			var n := Vector2(u.y, -u.x)
+			force_other = n * force_other.dot(n)
+	agent.position_predict += force_other
+	if agent.position.distance_squared_to(agent.position_predict) > 0.0:
+		var u := agent.position.direction_to(agent.position_predict)
+		var a := Vector3(-4.5 + agent.position.x, 0.1, -14.5 + agent.position.y)
+		var b := Vector3(a.x + u.x, 0.1, a.z + u.y)
+		Helper.debug_draw_line.call_deferred(a, b, 0.01, Color.BLACK)
 
 static func agent_move(_agent_: Agent, _cell_grid_: CellGrid, _dt_: float) -> void:
-	var force_move := Vector2.ZERO
-	var dt := _agent_.speed_factor * _dt_
-	var direction_face := Vector2.from_angle(_agent_.rotation)
-	if force_move.dot(_agent_.force_obstacle) < 0.0:
-		var n := _agent_.force_obstacle.normalized()
-		var ul := Vector2(n.y, -n.x)
-		var ur := Vector2(-n.y, n.x)
-		var u := ul if force_move.dot(ul) > force_move.dot(ur) else ur
-		if direction_face.dot(u) < 0.0:
-			u = -u
-		_agent_.force_other = _agent_.force_other.project(u)
-		force_move = force_move.length() * u
-	var force := _agent_.force_obstacle + _agent_.force_other + force_move
-	var force_magnitude := clampf(force.length(), -_agent_.position_speed_max, _agent_.position_speed_max)
-	var delta_rotation_target := direction_face.angle_to(force)
-	var rotation_sign := signf(delta_rotation_target)
-	var delta_rotation := _agent_.rotation_speed_max * dt
-	var rotation_next := wrapf(_agent_.rotation + rotation_sign * minf(delta_rotation, rotation_sign * delta_rotation_target), -PI, PI)
-	var direction_next := Vector2.from_angle(rotation_next)
-	_agent_.rotation = rotation_next
-	_agent_.position = _cell_grid_.clamp_position(_agent_.position + _agent_.velocity * dt)
-	_agent_.move_distance += _agent_.position.distance_to(_agent_.position_next)
+	_agent_.move_distance += _agent_.position.distance_to(_agent_.position_predict)
+	_agent_.rotation = _agent_.rotation_predict
+	_agent_.position = _agent_.position_predict
 #endregion
 
 #region debug
