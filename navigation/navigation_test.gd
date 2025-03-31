@@ -1,4 +1,4 @@
-class_name Navigation
+class_name NavigationTest
 extends Node
 
 @onready var _manual_agent: Label = $ui/manual_agent
@@ -66,6 +66,8 @@ func _ready() -> void:
 		var collider := child as CollisionShape3D
 		if collider.shape is SphereShape3D:
 			_obstacles.append(NavigationField.ObstacleCircle.new(_obstacles.size(), _navigation_field, collider))
+		elif collider.shape is CapsuleShape3D:
+			_obstacles.append(NavigationField.ObstacleCapsule.new(_obstacles.size(), _navigation_field, collider))
 		elif collider.shape is BoxShape3D:
 			_obstacles.append(NavigationField.ObstacleRectangle.new(_obstacles.size(), _navigation_field, collider))
 	_self_mouse = SelfMouse.new()
@@ -75,7 +77,7 @@ func _ready() -> void:
 	_input_ready = false
 	for i in 2: await get_tree().process_frame
 	_navigation_field_debug_vector = true
-	_navigation_field.cell_grid.calculate([0])
+	_navigation_field.cell_grid_get().calculate([0])
 	_navigation_field.debug_update(true, _navigation_field_debug_vector)
 	_input_ready = true
 
@@ -128,7 +130,7 @@ func _agents_kill(_count_: int) -> void:
 		_view_agents.multimesh.visible_instance_count = _agents.size()
 
 func _agents_process(_dt_: float) -> void:
-	var cell_grid := _navigation_field.cell_grid
+	var cell_grid := _navigation_field.cell_grid_get()
 	for agent in _agents:
 		NavigationField.agent_enter(agent, cell_grid)
 		NavigationField.agent_force_move(agent, _dt_)
@@ -201,7 +203,7 @@ func _input_middle_mouse() -> void:
 	if _self_mouse.middle_press_ing:
 		var p := _navigation_field.to_local(_self_mouse.position_world)
 		var p_local := Vector2(p.x, p.z)
-		var cell := _navigation_field.cell_grid.cell_nearest_get(p_local)
+		var cell := _navigation_field.cell_grid_get().cell_nearest_get(p_local)
 		if cell != null and cell.index != _self_mouse.middle_cell_index_last:
 			if cell.cost == NavigationField.Cell.Cost.WALL:
 				cell.cost = NavigationField.Cell.Cost.DEFAULT
@@ -248,11 +250,11 @@ func _input(_event_: InputEvent) -> void:
 						else:
 							agent_local.target = p_local
 							agent_local.target_ing = true
-					var cell := _navigation_field.cell_grid.cell_nearest_get(p_local)
+					var cell := _navigation_field.cell_grid_get().cell_nearest_get(p_local)
 					if cell == null or cell.cost == NavigationField.Cell.Cost.WALL:
 						return
 					var destinations: Array[int] = [cell.index]
-					var task := ThreadManager.do(_navigation_field, _navigation_field.cell_grid.calculate.bind(destinations.duplicate()))
+					var task := ThreadManager.do(_navigation_field, _navigation_field.cell_grid_get().calculate.bind(destinations.duplicate()))
 					if task != null:
 						await task.done
 						_navigation_field.debug_update(true, _navigation_field_debug_vector)

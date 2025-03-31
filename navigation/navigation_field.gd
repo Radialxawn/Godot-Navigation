@@ -1,6 +1,206 @@
 class_name NavigationField
 extends Node3D
 
+static func spawn(_parent_: Node) -> NavigationField:
+	var result := (load("res://navigation/navigation_field.tscn") as PackedScene).instantiate() as NavigationField
+	_parent_.add_child(result)
+	return result
+
+var _debug_cells: MultiMeshInstance3D
+var _debug_cells_vector: MultiMeshInstance3D
+var _cell_grid: CellGrid
+
+func _ready() -> void:
+	_debug_cells = $debug_cells
+	_debug_cells_vector = $debug_cells_vector
+
+func create(_size_: Vector2i, _cell_size_: Vector2, _debug_: bool) -> NavigationField:
+	_cell_grid = CellGrid.new(_size_, _cell_size_)
+	if not _debug_:
+		_debug_cells.queue_free()
+		_debug_cells_vector.queue_free()
+	else:
+		_debug_cells.multimesh.instance_count = _size_.x * _size_.y
+		_debug_cells_vector.multimesh.instance_count = _debug_cells.multimesh.instance_count
+	return self
+
+func cell_grid_get() -> CellGrid:
+	return _cell_grid
+
+func position_set(_position_: Vector3, _anchor_: Vector2) -> void:
+	position = Vector3(
+		_position_.x - _cell_grid.bound.min_x - _anchor_.x * _cell_grid.bound.x,
+		_position_.y,
+		_position_.z - _cell_grid.bound.min_y - _anchor_.y * _cell_grid.bound.y,
+	)
+
+static func agent_neighbors_index_get(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int) -> int:
+	var agent := _agents_[_agent_index_]
+	var index := 0
+	var count_max := agent.neighbors_index.size()
+	var cell := _cell_grid_.cell_get(agent.cell_index)
+	for agent_index: int in cell.agents_index:
+		if agent_index != agent.index:
+			if index < count_max:
+				agent.neighbors_index[index] = agent_index
+				index += 1
+	for neighbor_index: int in cell.neighbors_index:
+		var neighbor := _cell_grid_.cell_get(neighbor_index)
+		for agent_index: int in neighbor.agents_index:
+			if index < count_max:
+				agent.neighbors_index[index] = agent_index
+				index += 1
+	return index
+
+static func agent_exit(_agent_: Agent, _cell_grid_: CellGrid) -> void:
+	if _agent_.cell_index != -1:
+		_cell_grid_.cell_get(_agent_.cell_index).agents_index.erase(_agent_.index)
+
+static func agent_enter(_agent_: Agent, _cell_grid_: CellGrid) -> void:
+	var cell_index := _cell_grid_.cell_index_nearest_get(_agent_.position)
+	if cell_index != _agent_.cell_index:
+		if _agent_.cell_index != -1:
+			_cell_grid_.cell_get(_agent_.cell_index).agents_index.erase(_agent_.index)
+		_agent_.cell_index = cell_index
+		if cell_index != -1:
+			_cell_grid_.cell_get(cell_index).agents_index.append(_agent_.index)
+
+static func agent_force_move(_agent_: Agent, _dt_: float) -> void:
+	var force_move := Vector2.ZERO
+	if _agent_.target_ing:
+		var delta := _agent_.target - _agent_.position
+		var delta_length := delta.length()
+		if delta_length > _agent_.radius:
+			force_move = (delta / delta_length) * _agent_.position_speed_max
+			_agent_.speed_factor = minf(_agent_.speed_factor + _agent_.acceleration * _dt_, 1.0)
+		else:
+			_agent_.speed_factor = 0.0
+	var dt := _agent_.speed_factor * _dt_
+	var direction := Vector2.from_angle(_agent_.rotation)
+	var delta_rotation := direction.angle_to(force_move)
+	var delta_rotation_sign := signf(delta_rotation)
+	var delta_rotation_max_abs := _agent_.rotation_speed_max * dt
+	var delta_rotation_real := delta_rotation_sign * minf(delta_rotation_max_abs, delta_rotation_sign * delta_rotation)
+	var rotation_predict := wrapf(_agent_.rotation + delta_rotation_real, -PI, PI)
+	var position_predict := _agent_.position + Vector2.from_angle(rotation_predict) * (force_move.length() * dt)
+	_agent_.rotation_predict = rotation_predict
+	_agent_.position_predict = position_predict
+
+static func agent_force_obstacle(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int, _obstacles_: Array[Obstacle], _dt_: float) -> void:
+	var agent := _agents_[_agent_index_]
+	var distance_hits: Array[DistanceHit]
+	var obstacles_index_visisted: Array[int]
+	if agent.cell_index != -1:
+		var cell := _cell_grid_.cell_get(agent.cell_index)
+		for neighbor_index: int in cell.neighbors_index:
+			var neighbor := _cell_grid_.cell_get(neighbor_index)
+			for obstacle_index: int in neighbor.obstacles_index:
+				if obstacle_index not in obstacles_index_visisted:
+					var obstacle := _obstacles_[obstacle_index]
+					obstacle.calculate_distance(agent.position_predict, agent.radius, distance_hits)
+					obstacles_index_visisted.append(obstacle_index)
+	var force_obstacle := Vector2.ZERO
+	for hit: DistanceHit in distance_hits:
+		force_obstacle -= hit.normal * hit.distance;
+	var field_l := _cell_grid_.bound.limit_min.x - (agent.position_predict.x - agent.radius)
+	var field_r := _cell_grid_.bound.limit_max.x - (agent.position_predict.x + agent.radius)
+	var field_b := _cell_grid_.bound.limit_min.y - (agent.position_predict.y - agent.radius)
+	var field_t := _cell_grid_.bound.limit_max.y - (agent.position_predict.y + agent.radius)
+	if field_l >= 0.0:
+		force_obstacle.x += field_l
+	if field_r <= 0.0:
+		force_obstacle.x += field_r
+	if field_b >= 0.0:
+		force_obstacle.y += field_b
+	if field_t <= 0.0:
+		force_obstacle.y += field_t
+	agent.force_obstacle = force_obstacle
+	if force_obstacle.length_squared() > 0.0:
+		agent.position_predict += force_obstacle
+		agent.rotation_predict = (agent.position_predict - agent.position).angle()
+
+static func agent_force_other(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int, _dt_: float) -> void:
+	var force_other := Vector2.ZERO
+	var agent := _agents_[_agent_index_]
+	var neighbors_count := agent_neighbors_index_get(_cell_grid_, _agents_, _agent_index_)
+	var hit := DistanceHit.new()
+	for i: int in neighbors_count:
+		var agent_other := _agents_[agent.neighbors_index[i]]
+		var delta := agent_other.position_predict - agent.position_predict
+		var delta_length_sq := delta.length_squared()
+		var delta_length_min := agent.radius + agent_other.radius
+		if delta_length_sq < delta_length_min * delta_length_min:
+			var delta_length := sqrt(delta_length_sq)
+			var hit_distance := (delta_length_min - delta_length) * 0.5
+			if delta_length < 1e-3:
+				force_other -= hit_distance * Vector2.from_angle(agent.rotation)
+			else:
+				force_other -= (hit_distance / delta_length) * delta
+		if DistanceHit.circle_cast_circle(agent.position, agent.position_predict, agent.radius,
+			agent_other.position_predict, agent_other.radius, hit
+		):
+			pass
+			# find min distance and limit next movement by this
+			var u := hit.normal * hit.distance
+			var a := Vector3(-4.5 + agent.position.x, 0.1, -14.5 + agent.position.y)
+			var b := Vector3(a.x + u.x, 0.1, a.z + u.y)
+			Helper.debug_draw_sphere.call_deferred(a, agent.radius, Color.GREEN)
+			Helper.debug_draw_sphere.call_deferred(b, agent.radius, Color.RED)
+	if agent.force_obstacle.length_squared() > 0.0:
+		if force_other.dot(agent.force_obstacle) < 0.0:
+			var u := agent.force_obstacle.normalized()
+			var n := Vector2(u.y, -u.x)
+			force_other = n * force_other.dot(n)
+	agent.position_predict += force_other
+
+static func agent_move(_agent_: Agent, _cell_grid_: CellGrid, _dt_: float) -> void:
+	_agent_.move_distance += _agent_.position.distance_to(_agent_.position_predict)
+	_agent_.rotation = _agent_.rotation_predict
+	_agent_.position = _agent_.position_predict
+
+#region debug
+func _debug_cell_transform_get(_x_: int, _y_: int) -> Transform3D:
+	var cell_size := _cell_grid.cell_size
+	return (Transform3D.IDENTITY
+		.translated_local(Vector3(_x_ * cell_size.x, -cell_size.x * 0.5, _y_ * cell_size.y))
+		.scaled_local(Vector3(cell_size.x, cell_size.x, cell_size.y))
+	)
+
+func _debug_cell_transform_vector_get(_x_: int, _y_: int) -> Transform3D:
+	var cell := _cell_grid.cell_get(_cell_grid.cell_index_get(_x_, _y_))
+	var cell_size := _cell_grid.cell_size
+	var p_local := Vector3(cell.x * cell_size.x, 0.0, cell.y * cell_size.y)
+	return (Transform3D.IDENTITY
+		.translated_local(p_local)
+		.scaled_local(Vector3(cell_size.x * 0.6, 0.3, cell_size.y * 0.6))
+		.rotated_local(Vector3.DOWN, Vector2.UP.angle_to(cell.vector))
+	)
+
+func debug_update(_cell_: bool, _cell_vector_: bool) -> void:
+	if not is_instance_valid(_debug_cells):
+		return
+	await get_tree().physics_frame
+	_debug_cells_vector.multimesh.visible_instance_count = -1 if _cell_vector_ else 0
+	for i: int in _cell_grid.cell_count:
+		var cell := _cell_grid.cell_get(i)
+		var color_vector := Color.from_hsv(0.3 + cell.cost_best * 0.001, 0.8, 0.8)
+		if _cell_:
+			var color_cell := Color(0.4, 0.4, 0.4)
+			var tf := _debug_cell_transform_get(cell.x, cell.y)
+			if cell.cost == Cell.Cost.WALL:
+				tf = tf.translated_local(Vector3(0.0, 0.01, 0.0))
+				color_cell = Color(0.38, 0.38, 0.38)
+			_debug_cells.multimesh.set_instance_transform(i, tf)
+			_debug_cells.multimesh.set_instance_color(i, color_cell)
+		if _cell_vector_:
+			var tf := _debug_cell_transform_vector_get(cell.x, cell.y)
+			if cell.cost == Cell.Cost.WALL or cell.cost_best == Cell.Cost.DESTINATION:
+				tf = tf.scaled_local(Vector3.ZERO)
+			_debug_cells_vector.multimesh.set_instance_transform(i, tf)
+			_debug_cells_vector.multimesh.set_instance_color(i, color_vector)
+#endregion
+
+#region class Grid
 class Bound extends RefCounted:
 	var min_x: float
 	var min_y: float
@@ -184,36 +384,9 @@ class CellGrid extends RefCounted:
 			var direction := cell.vector
 			return direction.normalized()
 		return Vector2(INF, INF)
+#endregion
 
-var cell_grid: CellGrid
-var _debug: bool
-@onready var _debug_cells: MultiMeshInstance3D = $debug_cells
-@onready var _debug_cells_vector: MultiMeshInstance3D = $debug_cells_vector
-
-static func spawn(_parent_: Node) -> NavigationField:
-	var result := (load("res://navigation/navigation_field.tscn") as PackedScene).instantiate() as NavigationField
-	_parent_.add_child(result)
-	return result
-
-func create(_size_: Vector2i, _cell_size_: Vector2, _debug_: bool) -> NavigationField:
-	cell_grid = CellGrid.new(_size_, _cell_size_)
-	_debug = _debug_
-	if not _debug_:
-		_debug_cells.queue_free()
-		_debug_cells_vector.queue_free()
-	else:
-		_debug_cells.multimesh.instance_count = _size_.x * _size_.y
-		_debug_cells_vector.multimesh.instance_count = _debug_cells.multimesh.instance_count
-	return self
-
-func position_set(_position_: Vector3, _anchor_: Vector2) -> void:
-	position = Vector3(
-		_position_.x - cell_grid.bound.min_x - _anchor_.x * cell_grid.bound.x,
-		_position_.y,
-		_position_.z - cell_grid.bound.min_y - _anchor_.y * cell_grid.bound.y,
-	)
-
-#region Agents
+#region class Agent
 class Agent extends RefCounted:
 	var index: int
 	var radius: float
@@ -247,10 +420,32 @@ class Agent extends RefCounted:
 	func copy_target(_from_: Agent) -> void:
 		target = _from_.target
 		target_ing = _from_.target_ing
+#endregion
 
+#region class Obstacle
 class DistanceHit extends RefCounted:
 	var distance: float
 	var normal: Vector2
+	static func circle_cast_circle(_ray_start_: Vector2, _ray_end_: Vector2, _ray_radius_: float,
+		_circle_origin_: Vector2, _circle_radius_: float, _hit_: DistanceHit
+	) -> float:
+		var se := _ray_end_ - _ray_start_
+		var sel := se.length()
+		if sel < 1e-8:
+			return false
+		var u := Vector2(se.x / sel, se.y / sel)
+		var n := Vector2(u.y, -u.x)
+		_hit_.normal = u
+		var cp := _circle_origin_ - _ray_start_
+		var cpl := Vector2(cp.dot(u), cp.dot(n))
+		var tpl := Vector2(clampf(cpl.x, 0.0, sel), 0.0)
+		var r_sum := _ray_radius_ + _circle_radius_
+		var r_sum_sq := r_sum * r_sum
+		var d_sq := tpl.distance_squared_to(cpl)
+		if d_sq < r_sum_sq:
+			_hit_.distance = cpl.x - sqrt(r_sum_sq - cpl.y * cpl.y)
+			return _hit_.distance > 0.0
+		return false
 
 class Obstacle extends RefCounted:
 	var index: int
@@ -261,42 +456,59 @@ class Obstacle extends RefCounted:
 		index = _index_
 		var position_local := _flow_field_.to_local(_collider_.global_position)
 		position = Vector2(position_local.x, position_local.z)
-		var cell_index := _flow_field_.cell_grid.cell_index_nearest_get(_flow_field_.cell_grid.clamp_position(position))
+		var cell_index := _flow_field_._cell_grid.cell_index_nearest_get(_flow_field_._cell_grid.clamp_position(position))
 		if cell_index != -1:
 			cells_index.append(cell_index)
-			_flow_field_.cell_grid.cell_group_index_get(cells_index, 2)
+			_flow_field_._cell_grid.cell_group_index_get(cells_index, 2)
 	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
 		return false
-	static func circle_rectangle_overlap(_cp_: Vector2, _cr_: float, _rp_: Vector2, _rs_: Vector2) -> bool:
-		var cpl := _cp_ - _rp_
+	static func circle_rectangle_overlap(_cp_: Vector2, _cr_: float, _rp_: Vector2, _rs_: Vector2, _r_rad_: float) -> bool:
+		var cpl := (_cp_ - _rp_).rotated(-_r_rad_)
 		var tpl := cpl
-		var rsh := _rs_ * 0.5
-		if cpl.x < -rsh.x:
-			tpl.x = -rsh.x
-		elif cpl.x > rsh.x:
-			tpl.x = rsh.x
-		if cpl.y < -rsh.y:
-			tpl.y = -rsh.y
-		elif cpl.y > rsh.y:
-			tpl.y = rsh.y
-		return cpl.distance_squared_to(tpl) <= _cr_ * _cr_
-	static func capsule_rectangle_overlap(_cp_: Vector2, _cr_: float, _ch_: float, _rp_: Vector2, _rs_: Vector2) -> bool:
-		return false
-	static func rectangle_rectangle_overlap(_ap_: Vector2, _as_: Vector2, _ar_: float,
-											_bp_: Vector2, _bs_: Vector2, _br_: float) -> bool:
+		var inside := true
+		var sh := _rs_ * 0.5
+		if cpl.x < -sh.x:
+			tpl.x = -sh.x
+			inside = false
+		elif cpl.x > sh.x:
+			tpl.x = sh.x
+			inside = false
+		if cpl.y < -sh.y:
+			tpl.y = -sh.y
+			inside = false
+		elif cpl.y > sh.y:
+			tpl.y = sh.y
+			inside = false
+		if inside:
+			var dx := sh.x - absf(cpl.x)
+			var dy := sh.y - absf(cpl.y)
+			if dx < dy:
+				tpl.x = signf(cpl.x) * sh.x
+			else:
+				tpl.y = signf(cpl.y) * sh.y
+		return inside or tpl.distance_squared_to(cpl) <= _cr_ * _cr_
+	static func capsule_rectangle_overlap(_cp_: Vector2, _cr_: float, _cd_: float, _c_rad_: float, _rp_: Vector2, _rs_: Vector2, _r_rad_: float) -> bool:
+		var cc_delta := Vector2.from_angle(_c_rad_) * (_cd_ * 0.5)
+		return (
+			circle_rectangle_overlap(_cp_ + cc_delta, _cr_, _rp_, _rs_, _r_rad_) or
+			circle_rectangle_overlap(_cp_ - cc_delta, _cr_, _rp_, _rs_, _r_rad_) or
+			rectangle_rectangle_overlap(_cp_, Vector2(_cd_, _cr_ * 2.0), _c_rad_, _rp_, _rs_, _r_rad_)
+		)
+	static func rectangle_rectangle_overlap(_ap_: Vector2, _as_: Vector2, _a_rad_: float,
+											_bp_: Vector2, _bs_: Vector2, _b_rad_: float) -> bool:
 		var ash := _as_ * 0.5
 		var bsh := _bs_ * 0.5
 		var a: Array[Vector2] = [
-			_ap_ + Vector2(-ash.x, -ash.y).rotated(_ar_),
-			_ap_ + Vector2(+ash.x, -ash.y).rotated(_ar_),
-			_ap_ + Vector2(+ash.x, +ash.y).rotated(_ar_),
-			_ap_ + Vector2(-ash.x, +ash.y).rotated(_ar_),
+			_ap_ + Vector2(-ash.x, -ash.y).rotated(_a_rad_),
+			_ap_ + Vector2(+ash.x, -ash.y).rotated(_a_rad_),
+			_ap_ + Vector2(+ash.x, +ash.y).rotated(_a_rad_),
+			_ap_ + Vector2(-ash.x, +ash.y).rotated(_a_rad_),
 		]
 		var b: Array[Vector2] = [
-			_bp_ + Vector2(-bsh.x, -bsh.y).rotated(_br_),
-			_bp_ + Vector2(+bsh.x, -bsh.y).rotated(_br_),
-			_bp_ + Vector2(+bsh.x, +bsh.y).rotated(_br_),
-			_bp_ + Vector2(-bsh.x, +bsh.y).rotated(_br_),
+			_bp_ + Vector2(-bsh.x, -bsh.y).rotated(_b_rad_),
+			_bp_ + Vector2(+bsh.x, -bsh.y).rotated(_b_rad_),
+			_bp_ + Vector2(+bsh.x, +bsh.y).rotated(_b_rad_),
+			_bp_ + Vector2(-bsh.x, +bsh.y).rotated(_b_rad_),
 		]
 		return _rectangle_rectangle_overlap_pair(a, b) and _rectangle_rectangle_overlap_pair(b, a)
 	static func _rectangle_rectangle_overlap_pair(_a_: Array[Vector2], _b_: Array[Vector2]) -> bool:
@@ -324,8 +536,8 @@ class ObstacleCircle extends Obstacle:
 		var sphere := _collider_.shape as SphereShape3D
 		radius = sphere.radius
 		for cell_index in cells_index:
-			var cell := _flow_field_.cell_grid.cell_get(cell_index)
-			if Obstacle.circle_rectangle_overlap(position, radius, cell.position, _flow_field_.cell_grid.cell_size):
+			var cell := _flow_field_._cell_grid.cell_get(cell_index)
+			if Obstacle.circle_rectangle_overlap(position, radius, cell.position, _flow_field_._cell_grid.cell_size, 0.0):
 				cell.obstacles_index.append(index)
 				cell.cost = Cell.Cost.WALL
 	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
@@ -342,18 +554,32 @@ class ObstacleCircle extends Obstacle:
 
 class ObstacleCapsule extends Obstacle:
 	var radius: float
-	var height: float
+	var distance: float
 	func _init(_index_: int, _flow_field_: NavigationField, _collider_: CollisionShape3D) -> void:
 		super._init(_index_, _flow_field_, _collider_)
-		var sphere := _collider_.shape as SphereShape3D
-		radius = sphere.radius
+		var capsule := _collider_.shape as CapsuleShape3D
+		radius = capsule.radius
+		distance = capsule.height - radius * 2.0
+		var face_local := _collider_.global_transform.basis.x
+		rotation = Vector2(face_local.x, face_local.z).angle() + PI * 0.5
 		for cell_index in cells_index:
-			var cell := _flow_field_.cell_grid.cell_get(cell_index)
-			if Obstacle.capsule_rectangle_overlap(position, radius, height, cell.position, _flow_field_.cell_grid.cell_size):
+			var cell := _flow_field_._cell_grid.cell_get(cell_index)
+			if Obstacle.capsule_rectangle_overlap(position, radius, distance, rotation, cell.position, _flow_field_._cell_grid.cell_size, 0.0):
 				cell.obstacles_index.append(index)
 				cell.cost = Cell.Cost.WALL
 	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
-		return false
+		var cpl := (_position_ - position).rotated(-rotation)
+		var dh := distance * 0.5
+		var tpl := Vector2(clampf(cpl.x, -dh, dh), 0.0)
+		var r_sum := radius + _radius_
+		var d_sq := tpl.distance_squared_to(cpl)
+		var hit := d_sq <= r_sum * r_sum
+		if hit:
+			var distance_hit := DistanceHit.new()
+			_distance_hits_.append(distance_hit)
+			distance_hit.distance = sqrt(d_sq) - r_sum
+			distance_hit.normal = (cpl - tpl).rotated(rotation).normalized()
+		return hit
 
 class ObstacleRectangle extends Obstacle:
 	var size: Vector2
@@ -361,11 +587,11 @@ class ObstacleRectangle extends Obstacle:
 		super._init(_index_, _flow_field_, _collider_)
 		var box := _collider_.shape as BoxShape3D
 		size = Vector2(box.size.x, box.size.z)
-		var right_local := _collider_.global_transform.basis.x
-		rotation = Vector2(right_local.x, right_local.z).angle()
+		var face_local := _collider_.global_transform.basis.x
+		rotation = Vector2(face_local.x, face_local.z).angle()
 		for cell_index in cells_index:
-			var cell := _flow_field_.cell_grid.cell_get(cell_index)
-			if Obstacle.rectangle_rectangle_overlap(position, size, rotation, cell.position, _flow_field_.cell_grid.cell_size, 0.0):
+			var cell := _flow_field_._cell_grid.cell_get(cell_index)
+			if Obstacle.rectangle_rectangle_overlap(position, size, rotation, cell.position, _flow_field_._cell_grid.cell_size, 0.0):
 				cell.obstacles_index.append(index)
 				cell.cost = Cell.Cost.WALL
 	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
@@ -404,166 +630,4 @@ class ObstacleRectangle extends Obstacle:
 				distance_hit.distance = sqrt(d_sq) - _radius_
 				distance_hit.normal = (cpl - tpl).rotated(rotation).normalized()
 		return hit
-
-static func agent_neighbors_index_get(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int) -> int:
-	var agent := _agents_[_agent_index_]
-	var index := 0
-	var count_max := agent.neighbors_index.size()
-	var cell := _cell_grid_.cell_get(agent.cell_index)
-	for agent_index: int in cell.agents_index:
-		if agent_index != agent.index:
-			if index < count_max:
-				agent.neighbors_index[index] = agent_index
-				index += 1
-	for neighbor_index: int in cell.neighbors_index:
-		var neighbor := _cell_grid_.cell_get(neighbor_index)
-		for agent_index: int in neighbor.agents_index:
-			if index < count_max:
-				agent.neighbors_index[index] = agent_index
-				index += 1
-	return index
-
-static func agent_exit(_agent_: Agent, _cell_grid_: CellGrid) -> void:
-	if _agent_.cell_index != -1:
-		_cell_grid_.cell_get(_agent_.cell_index).agents_index.erase(_agent_.index)
-
-static func agent_enter(_agent_: Agent, _cell_grid_: CellGrid) -> void:
-	var cell_index := _cell_grid_.cell_index_nearest_get(_agent_.position)
-	if cell_index != _agent_.cell_index:
-		if _agent_.cell_index != -1:
-			_cell_grid_.cell_get(_agent_.cell_index).agents_index.erase(_agent_.index)
-		_agent_.cell_index = cell_index
-		if cell_index != -1:
-			_cell_grid_.cell_get(cell_index).agents_index.append(_agent_.index)
-
-static func agent_force_move(_agent_: Agent, _dt_: float) -> void:
-	var force_move := Vector2.ZERO
-	if _agent_.target_ing:
-		var delta := _agent_.target - _agent_.position
-		var delta_length := delta.length()
-		if delta_length > _agent_.radius:
-			force_move = (delta / delta_length) * _agent_.position_speed_max
-			_agent_.speed_factor = minf(_agent_.speed_factor + _agent_.acceleration * _dt_, 1.0)
-		else:
-			_agent_.speed_factor = 0.0
-	var dt := _agent_.speed_factor * _dt_
-	var direction := Vector2.from_angle(_agent_.rotation)
-	var delta_rotation := direction.angle_to(force_move)
-	var delta_rotation_sign := signf(delta_rotation)
-	var delta_rotation_max_abs := _agent_.rotation_speed_max * dt
-	var delta_rotation_real := delta_rotation_sign * minf(delta_rotation_max_abs, delta_rotation_sign * delta_rotation)
-	var rotation_predict := wrapf(_agent_.rotation + delta_rotation_real, -PI, PI)
-	var position_predict := _agent_.position + Vector2.from_angle(rotation_predict) * (force_move.length() * dt)
-	_agent_.rotation_predict = rotation_predict
-	_agent_.position_predict = position_predict
-
-static func agent_force_obstacle(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int, _obstacles_: Array[Obstacle], _dt_: float) -> void:
-	var agent := _agents_[_agent_index_]
-	var distance_hits: Array[DistanceHit]
-	var obstacles_index_visisted: Array[int]
-	if agent.cell_index != -1:
-		var cell := _cell_grid_.cell_get(agent.cell_index)
-		for neighbor_index: int in cell.neighbors_index:
-			var neighbor := _cell_grid_.cell_get(neighbor_index)
-			for obstacle_index: int in neighbor.obstacles_index:
-				if obstacle_index not in obstacles_index_visisted:
-					var obstacle := _obstacles_[obstacle_index]
-					obstacle.calculate_distance(agent.position_predict, agent.radius, distance_hits)
-					obstacles_index_visisted.append(obstacle_index)
-	var force_obstacle := Vector2.ZERO
-	for hit: DistanceHit in distance_hits:
-		force_obstacle -= hit.normal * hit.distance;
-	var field_l := _cell_grid_.bound.limit_min.x - (agent.position_predict.x - agent.radius)
-	var field_r := _cell_grid_.bound.limit_max.x - (agent.position_predict.x + agent.radius)
-	var field_b := _cell_grid_.bound.limit_min.y - (agent.position_predict.y - agent.radius)
-	var field_t := _cell_grid_.bound.limit_max.y - (agent.position_predict.y + agent.radius)
-	if field_l >= 0.0:
-		force_obstacle.x += field_l
-	if field_r <= 0.0:
-		force_obstacle.x += field_r
-	if field_b >= 0.0:
-		force_obstacle.y += field_b
-	if field_t <= 0.0:
-		force_obstacle.y += field_t
-	agent.force_obstacle = force_obstacle
-	if force_obstacle.length_squared() > 0.0:
-		agent.position_predict += force_obstacle
-		agent.rotation_predict = (agent.position_predict - agent.position).angle()
-
-static func agent_force_other(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int, _dt_: float) -> void:
-	#circle cast from postion to position predict
-	#circle cast other agent to find possible movement
-	var force_other := Vector2.ZERO
-	var agent := _agents_[_agent_index_]
-	var neighbors_count := agent_neighbors_index_get(_cell_grid_, _agents_, _agent_index_)
-	for i: int in neighbors_count:
-		var agent_other := _agents_[agent.neighbors_index[i]]
-		var delta := agent_other.position_predict - agent.position_predict
-		var delta_length_sq := delta.length_squared()
-		var delta_length_min := agent.radius + agent_other.radius
-		if delta_length_sq < delta_length_min * delta_length_min:
-			var delta_length := sqrt(delta_length_sq)
-			var hit_distance := (delta_length_min - delta_length) * 0.5
-			if delta_length < 1e-3:
-				force_other -= hit_distance * Vector2.from_angle(agent.rotation)
-			else:
-				force_other -= (hit_distance / delta_length) * delta
-	if agent.force_obstacle.length_squared() > 0.0:
-		if force_other.dot(agent.force_obstacle) < 0.0:
-			var u := agent.force_obstacle.normalized()
-			var n := Vector2(u.y, -u.x)
-			force_other = n * force_other.dot(n)
-	agent.position_predict += force_other
-	if agent.position.distance_squared_to(agent.position_predict) > 0.0:
-		var u := agent.position.direction_to(agent.position_predict)
-		var a := Vector3(-4.5 + agent.position.x, 0.1, -14.5 + agent.position.y)
-		var b := Vector3(a.x + u.x, 0.1, a.z + u.y)
-		Helper.debug_draw_line.call_deferred(a, b, 0.01, Color.BLACK)
-
-static func agent_move(_agent_: Agent, _cell_grid_: CellGrid, _dt_: float) -> void:
-	_agent_.move_distance += _agent_.position.distance_to(_agent_.position_predict)
-	_agent_.rotation = _agent_.rotation_predict
-	_agent_.position = _agent_.position_predict
-#endregion
-
-#region debug
-func _debug_cell_transform_get(_x_: int, _y_: int) -> Transform3D:
-	var cell_size := cell_grid.cell_size
-	return (Transform3D.IDENTITY
-		.translated_local(Vector3(_x_ * cell_size.x, -cell_size.x * 0.5, _y_ * cell_size.y))
-		.scaled_local(Vector3(cell_size.x, cell_size.x, cell_size.y))
-	)
-
-func _debug_cell_transform_vector_get(_x_: int, _y_: int) -> Transform3D:
-	var cell := cell_grid.cell_get(cell_grid.cell_index_get(_x_, _y_))
-	var cell_size := cell_grid.cell_size
-	var p_local := Vector3(cell.x * cell_size.x, 0.0, cell.y * cell_size.y)
-	return (Transform3D.IDENTITY
-		.translated_local(p_local)
-		.scaled_local(Vector3(cell_size.x * 0.6, 0.3, cell_size.y * 0.6))
-		.rotated_local(Vector3.DOWN, Vector2.UP.angle_to(cell.vector))
-	)
-
-func debug_update(_cell_: bool, _cell_vector_: bool) -> void:
-	if not _debug:
-		return
-	await get_tree().physics_frame
-	_debug_cells_vector.multimesh.visible_instance_count = -1 if _cell_vector_ else 0
-	for i: int in cell_grid.cell_count:
-		var cell := cell_grid.cell_get(i)
-		var color_vector := Color.from_hsv(0.3 + cell.cost_best * 0.001, 0.8, 0.8)
-		if _cell_:
-			var color_cell := Color(0.4, 0.4, 0.4)
-			var tf := _debug_cell_transform_get(cell.x, cell.y)
-			if cell.cost == Cell.Cost.WALL:
-				tf = tf.translated_local(Vector3(0.0, 0.01, 0.0))
-				color_cell = Color(0.38, 0.38, 0.38)
-			_debug_cells.multimesh.set_instance_transform(i, tf)
-			_debug_cells.multimesh.set_instance_color(i, color_cell)
-		if _cell_vector_:
-			var tf := _debug_cell_transform_vector_get(cell.x, cell.y)
-			if cell.cost == Cell.Cost.WALL or cell.cost_best == Cell.Cost.DESTINATION:
-				tf = tf.scaled_local(Vector3.ZERO)
-			_debug_cells_vector.multimesh.set_instance_transform(i, tf)
-			_debug_cells_vector.multimesh.set_instance_color(i, color_vector)
 #endregion

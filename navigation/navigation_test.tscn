@@ -1,10 +1,10 @@
-[gd_scene load_steps=19 format=3 uid="uid://c2u0ss0kaxbw5"]
+[gd_scene load_steps=23 format=3 uid="uid://c2u0ss0kaxbw5"]
 
-[ext_resource type="Script" uid="uid://b1565sp3gmmth" path="res://navigation/navigation.gd" id="1_5q35k"]
-[ext_resource type="Shader" uid="uid://d0scbof4m78iy" path="res://shader/spatial_debug/navigation_debug_agent.gdshader" id="2_moll0"]
-[ext_resource type="PackedScene" uid="uid://c38cb1hjopv17" path="res://3d/creep/creep_1.glb" id="3_avam6"]
-[ext_resource type="Texture2D" uid="uid://6na4m5yeal10" path="res://3d/creep/creep_1_action.exr" id="3_yuw3b"]
-[ext_resource type="Texture2D" uid="uid://bs2rpevrikdmo" path="res://2d/albedo.png" id="4_qcdcr"]
+[ext_resource type="Script" uid="uid://b1565sp3gmmth" path="res://navigation/navigation_test.gd" id="1_2mcp8"]
+[ext_resource type="Shader" uid="uid://d0scbof4m78iy" path="res://shader/spatial_debug/navigation_debug_agent.gdshader" id="2_pjfpq"]
+[ext_resource type="Texture2D" uid="uid://6na4m5yeal10" path="res://3d/creep/creep_1_action.exr" id="3_2jfso"]
+[ext_resource type="Texture2D" uid="uid://bs2rpevrikdmo" path="res://2d/albedo.png" id="4_vsyqt"]
+[ext_resource type="PackedScene" uid="uid://c38cb1hjopv17" path="res://3d/creep/creep_1.glb" id="5_0yrbm"]
 
 [sub_resource type="Environment" id="Environment_h3ye5"]
 background_mode = 1
@@ -16,9 +16,9 @@ glow_enabled = true
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_jfo2b"]
 render_priority = 0
-shader = ExtResource("2_moll0")
-shader_parameter/texture_albedo = ExtResource("4_qcdcr")
-shader_parameter/action = ExtResource("3_yuw3b")
+shader = ExtResource("2_pjfpq")
+shader_parameter/texture_albedo = ExtResource("4_vsyqt")
+shader_parameter/action = ExtResource("3_2jfso")
 shader_parameter/position_scale = 3.0
 
 [sub_resource type="MultiMesh" id="MultiMesh_yuw3b"]
@@ -43,24 +43,38 @@ radius = 0.75
 
 [sub_resource type="SphereMesh" id="SphereMesh_jfo2b"]
 radius = 0.75
-height = 0.75
+height = 1.5
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_qcdcr"]
 radius = 1.5
 
 [sub_resource type="SphereMesh" id="SphereMesh_7sxkd"]
 radius = 1.5
-height = 1.5
+height = 3.0
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_moll0"]
 radius = 1.25
 
 [sub_resource type="SphereMesh" id="SphereMesh_epcev"]
 radius = 1.25
-height = 1.25
+height = 2.5
 
-[node name="navigation" type="Node"]
-script = ExtResource("1_5q35k")
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_moll0"]
+height = 2.5
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_yuw3b"]
+height = 2.5
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_yuw3b"]
+radius = 0.3
+height = 2.5
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_qcdcr"]
+radius = 0.3
+height = 2.5
+
+[node name="navigation_test" type="Node"]
+script = ExtResource("1_2mcp8")
 
 [node name="directional_light" type="DirectionalLight3D" parent="."]
 transform = Transform3D(-0.605988, -0.653202, 0.453988, 0, 0.570714, 0.821149, -0.795474, 0.497607, -0.345846, 0, 0, 0)
@@ -153,7 +167,7 @@ far = 100.0
 material_override = SubResource("ShaderMaterial_jfo2b")
 multimesh = SubResource("MultiMesh_yuw3b")
 
-[node name="creep_1" parent="view_agents" instance=ExtResource("3_avam6")]
+[node name="creep_1" parent="view_agents" instance=ExtResource("5_0yrbm")]
 visible = false
 
 [node name="obstacles" type="Area3D" parent="."]
@@ -177,6 +191,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 shape = SubResource("SphereShape3D_yuw3b")
 
 [node name="mesh" type="MeshInstance3D" parent="obstacles/sphere_1"]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0, 0, 0, 1, 0, 0, 0)
 mesh = SubResource("SphereMesh_jfo2b")
 
 [node name="sphere_2" type="CollisionShape3D" parent="obstacles"]
@@ -184,6 +199,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 2.5)
 shape = SubResource("SphereShape3D_qcdcr")
 
 [node name="mesh" type="MeshInstance3D" parent="obstacles/sphere_2"]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0, 0, 0, 1, 0, 0, 0)
 mesh = SubResource("SphereMesh_7sxkd")
 
 [node name="sphere_3" type="CollisionShape3D" parent="obstacles"]
@@ -191,4 +207,21 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5, 0, 3.5)
 shape = SubResource("SphereShape3D_moll0")
 
 [node name="mesh" type="MeshInstance3D" parent="obstacles/sphere_3"]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0, 0, 0, 1, 0, 0, 0)
 mesh = SubResource("SphereMesh_epcev")
+
+[node name="capsule_1" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(0.573576, 0.819152, -3.58063e-08, 0, -4.37114e-08, -1, -0.819152, 0.573576, -2.50718e-08, 1.98094, 0, -6.09123)
+shape = SubResource("CapsuleShape3D_moll0")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/capsule_1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.5, 0, 0, 0)
+mesh = SubResource("CapsuleMesh_yuw3b")
+
+[node name="capsule_2" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(-0.721108, 0.692823, -3.58063e-08, 4.31905e-08, -6.72793e-09, -1, -0.692823, -0.721108, -2.50718e-08, 2.30982, 1.06343e-08, 6.44774)
+shape = SubResource("CapsuleShape3D_yuw3b")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/capsule_2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.5, 0, 0, 0)
+mesh = SubResource("CapsuleMesh_qcdcr")
