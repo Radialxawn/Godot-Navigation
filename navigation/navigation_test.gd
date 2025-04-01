@@ -113,7 +113,7 @@ func _agents_spawn(_position_local_: Vector2, _count_: int) -> void:
 
 func _agents_kill_task(_count_: int) -> void:
 	for i in range(_agents_local.size() - 1, _agents_local.size() - 1 - _count_, -1):
-		NavigationField.agent_exit(_agents[i], _navigation_field.cell_grid)
+		NavigationField.agent_exit(_agents[i], _navigation_field.cell_grid_get())
 		_agents.remove_at(i)
 		_agents_local.remove_at(i)
 
@@ -175,9 +175,10 @@ func _physics_process(_dt_: float) -> void:
 		_physics_time_sec_last = Global.physics_time_sec()
 
 func _process(_dt_: float) -> void:
-	_debug.text = "FPS: %d, Agent count: %d" % [
+	_debug.text = "FPS: %d, Agent count: %d, Mem: %.1fMB" % [
 		Engine.get_frames_per_second(),
 		_agents_local.size(),
+		Performance.get_monitor(Performance.MEMORY_STATIC) * 1e-6,
 		]
 
 static func _position_get(_camera_: Camera3D, _screen_position_: Vector2) -> Vector3:

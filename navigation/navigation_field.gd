@@ -33,6 +33,7 @@ func position_set(_position_: Vector3, _anchor_: Vector2) -> void:
 		_position_.y,
 		_position_.z - _cell_grid.bound.min_y - _anchor_.y * _cell_grid.bound.y,
 	)
+	_cell_grid.debug_offset = position
 
 static func agent_neighbors_index_get(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int) -> int:
 	var agent := _agents_[_agent_index_]
@@ -100,8 +101,8 @@ static func agent_force_obstacle(_cell_grid_: CellGrid, _agents_: Array[Agent], 
 					obstacle.calculate_distance(agent.position_predict, agent.radius, distance_hits)
 					obstacles_index_visisted.append(obstacle_index)
 	var force_obstacle := Vector2.ZERO
-	for hit: DistanceHit in distance_hits:
-		force_obstacle -= hit.normal * hit.distance;
+	for distance_hit: DistanceHit in distance_hits:
+		force_obstacle -= distance_hit.normal * distance_hit.distance;
 	var field_l := _cell_grid_.bound.limit_min.x - (agent.position_predict.x - agent.radius)
 	var field_r := _cell_grid_.bound.limit_max.x - (agent.position_predict.x + agent.radius)
 	var field_b := _cell_grid_.bound.limit_min.y - (agent.position_predict.y - agent.radius)
@@ -123,7 +124,11 @@ static func agent_force_other(_cell_grid_: CellGrid, _agents_: Array[Agent], _ag
 	var force_other := Vector2.ZERO
 	var agent := _agents_[_agent_index_]
 	var neighbors_count := agent_neighbors_index_get(_cell_grid_, _agents_, _agent_index_)
-	var hit := DistanceHit.new()
+	var ray_hit := RayHit.new()
+	var ray_hit_bool := false
+	var ray_hit_direction_efficient := Vector2.ZERO
+	var predict_distance := agent.position.distance_to(agent.position_predict)
+	var ray_hit_min_distance: float = predict_distance
 	for i: int in neighbors_count:
 		var agent_other := _agents_[agent.neighbors_index[i]]
 		var delta := agent_other.position_predict - agent.position_predict
@@ -136,22 +141,44 @@ static func agent_force_other(_cell_grid_: CellGrid, _agents_: Array[Agent], _ag
 				force_other -= hit_distance * Vector2.from_angle(agent.rotation)
 			else:
 				force_other -= (hit_distance / delta_length) * delta
-		if DistanceHit.circle_cast_circle(agent.position, agent.position_predict, agent.radius,
-			agent_other.position_predict, agent_other.radius, hit
-		):
+			if ray_hit.circle_cast_circle(agent.position, agent.position_predict, agent.radius,
+				agent_other.position_predict, agent_other.radius
+			):
+				if ray_hit.distance < ray_hit_min_distance:
+					ray_hit_bool = true
+					ray_hit_min_distance = ray_hit.distance
+					ray_hit_direction_efficient = ray_hit.direction
+		else:
+			agent.neighbors_index[i] = -1
+	if ray_hit_bool:
+		if ray_hit_min_distance > predict_distance * 0.5:
+			agent.position_predict = agent.position + ray_hit_direction_efficient * ray_hit_min_distance
+			agent.speed_factor *= 0.5
+		else:
+			#_agent_force_other_sight(_agents_, _agent_index_, neighbors_count)
 			pass
-			# find min distance and limit next movement by this
-			var u := hit.normal * hit.distance
-			var a := Vector3(-4.5 + agent.position.x, 0.1, -14.5 + agent.position.y)
-			var b := Vector3(a.x + u.x, 0.1, a.z + u.y)
-			Helper.debug_draw_sphere.call_deferred(a, agent.radius, Color.GREEN)
-			Helper.debug_draw_sphere.call_deferred(b, agent.radius, Color.RED)
+	#test
+	if agent.index == 0:
+		_agent_force_other_sight(_cell_grid_, _agents_, _agent_index_, neighbors_count)
+	#test
 	if agent.force_obstacle.length_squared() > 0.0:
 		if force_other.dot(agent.force_obstacle) < 0.0:
 			var u := agent.force_obstacle.normalized()
 			var n := Vector2(u.y, -u.x)
 			force_other = n * force_other.dot(n)
 	agent.position_predict += force_other
+
+static func _agent_force_other_sight(_cell_grid_: CellGrid, _agents_: Array[Agent], _agent_index_: int, _neighbors_count_: int) -> void:
+	var agent := _agents_[_agent_index_]
+	var sight := Sight.new(agent.position, agent.rotation)
+	for i: int in _neighbors_count_:
+		var neighbor_index := agent.neighbors_index[i]
+		if neighbor_index == -1:
+			continue
+		var agent_other := _agents_[neighbor_index]
+		sight.calculate(agent_other.position)
+	sight.debug_draw(_cell_grid_.debug_offset)
+	agent.position_predict = agent.position
 
 static func agent_move(_agent_: Agent, _cell_grid_: CellGrid, _dt_: float) -> void:
 	_agent_.move_distance += _agent_.position.distance_to(_agent_.position_predict)
@@ -260,6 +287,7 @@ class CellGrid extends RefCounted:
 		get(): return _cell_size
 	var cell_count: int:
 		get(): return _cells.size()
+	var debug_offset: Vector3
 	func _init(_size_: Vector2i, _cell_size_: Vector2) -> void:
 		_size = _size_
 		_cell_size = _cell_size_
@@ -420,14 +448,51 @@ class Agent extends RefCounted:
 	func copy_target(_from_: Agent) -> void:
 		target = _from_.target
 		target_ing = _from_.target_ing
-#endregion
 
-#region class Obstacle
-class DistanceHit extends RefCounted:
+class Sight extends RefCounted:
+	var position: Vector2
+	var rotation: float
+	var direction: Vector2
+	var _valid_mask: int
+	var _face: Vector2
+	const PI2: float = PI * 2.0
+	const ARC_COUNT_I: int = 8
+	const ARC_COUNT_F: float = ARC_COUNT_I
+	const ARC_RAD: float = PI2 / ARC_COUNT_F
+	func _init(_position_: Vector2, _rotation_: float) -> void:
+		position = _position_
+		rotation = _rotation_
+		_face = Vector2.from_angle(rotation)
+	func calculate(_target_: Vector2) -> void:
+		var u := _target_ - position
+		var rad := _face.angle_to(u)
+		if rad < 0.0:
+			rad += PI2
+		var arc_index := int(ceil(rad / ARC_RAD)) % ARC_COUNT_I
+		_valid_mask = _valid_mask | (1 << arc_index)
+	func direction_get() -> bool:
+		#get first valid by checking 0,7 -> 1,6 -> 2,5 -> 3,4
+		for i: int in ARC_COUNT_I:
+			pass
+		return false
+	func debug_draw(_offset_: Vector3) -> void:
+		var a := Vector3(_offset_.x + position.x, _offset_.y + 0.1, _offset_.z + position.y)
+		var b := Vector3.ZERO
+		for i: int in ARC_COUNT_I:
+			var u := Vector2.from_angle(rotation + ARC_RAD * (i - 0.5))
+			b = Vector3(a.x + u.x, a.y, a.z + u.y)
+			var color := Color.BLACK
+			if (_valid_mask & (1 << i)) > 0:
+				color = Color.RED
+			Helper.debug_draw_line.call_deferred(a, b, 0.01, color)
+		b = Vector3(a.x + _face.x, a.y, a.z + _face.y)
+		Helper.debug_draw_line.call_deferred(a, b, 0.01, Color.GREEN)
+
+class RayHit extends RefCounted:
 	var distance: float
-	var normal: Vector2
-	static func circle_cast_circle(_ray_start_: Vector2, _ray_end_: Vector2, _ray_radius_: float,
-		_circle_origin_: Vector2, _circle_radius_: float, _hit_: DistanceHit
+	var direction: Vector2
+	func circle_cast_circle(_ray_start_: Vector2, _ray_end_: Vector2, _ray_radius_: float,
+		_circle_origin_: Vector2, _circle_radius_: float
 	) -> float:
 		var se := _ray_end_ - _ray_start_
 		var sel := se.length()
@@ -435,7 +500,7 @@ class DistanceHit extends RefCounted:
 			return false
 		var u := Vector2(se.x / sel, se.y / sel)
 		var n := Vector2(u.y, -u.x)
-		_hit_.normal = u
+		direction = u
 		var cp := _circle_origin_ - _ray_start_
 		var cpl := Vector2(cp.dot(u), cp.dot(n))
 		var tpl := Vector2(clampf(cpl.x, 0.0, sel), 0.0)
@@ -443,9 +508,15 @@ class DistanceHit extends RefCounted:
 		var r_sum_sq := r_sum * r_sum
 		var d_sq := tpl.distance_squared_to(cpl)
 		if d_sq < r_sum_sq:
-			_hit_.distance = cpl.x - sqrt(r_sum_sq - cpl.y * cpl.y)
-			return _hit_.distance > 0.0
+			distance = cpl.x - sqrt(r_sum_sq - cpl.y * cpl.y)
+			return distance > 0.0
 		return false
+#endregion
+
+#region class Obstacle
+class DistanceHit extends RefCounted:
+	var distance: float
+	var normal: Vector2
 
 class Obstacle extends RefCounted:
 	var index: int
