@@ -233,3 +233,19 @@ shape = SubResource("CapsuleShape3D_yuw3b")
 [node name="mesh" type="MeshInstance3D" parent="obstacles/capsule_3"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.5, 0, 0, 0)
 mesh = SubResource("CapsuleMesh_qcdcr")
+
+[node name="capsule_4" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(-0.721108, 0.692823, -3.58063e-08, 4.31905e-08, -6.72793e-09, -1, -0.692823, -0.721108, -2.50718e-08, -0.275351, 1.06343e-08, 5.65441)
+shape = SubResource("CapsuleShape3D_yuw3b")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/capsule_4"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.5, 0, 0, 0)
+mesh = SubResource("CapsuleMesh_qcdcr")
+
+[node name="capsule_5" type="CollisionShape3D" parent="obstacles"]
+transform = Transform3D(-0.660591, -0.750746, -3.58063e-08, 4.83075e-09, 4.34437e-08, -1, 0.750746, -0.660591, -2.50718e-08, -0.275351, 1.06343e-08, 5.65441)
+shape = SubResource("CapsuleShape3D_yuw3b")
+
+[node name="mesh" type="MeshInstance3D" parent="obstacles/capsule_5"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.5, 0, 0, 0)
+mesh = SubResource("CapsuleMesh_qcdcr")

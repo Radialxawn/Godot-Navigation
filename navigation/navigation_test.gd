@@ -12,6 +12,7 @@ var _navigation_field: NavigationField
 var _navigation_field_debug_vector: bool
 var _agents: Array[NavigationField.Agent]
 var _agents_local: Array[NavigationField.Agent]
+var _agents_target_changed: bool
 var _obstacles: Array[NavigationField.Obstacle]
 var _physics_time_sec_last: float
 var _input_ready: bool
@@ -76,8 +77,8 @@ func _ready() -> void:
 	_input_change_spawn_count()
 	_input_ready = false
 	for i in 2: await get_tree().process_frame
-	_navigation_field_debug_vector = true
-	_navigation_field.cell_grid_get().calculate([0])
+	_navigation_field_debug_vector = false
+	_navigation_field.cell_grid_get().calculate_flow_field([0])
 	_navigation_field.debug_update(true, _navigation_field_debug_vector)
 	_input_ready = true
 
@@ -133,11 +134,10 @@ func _agents_process(_dt_: float) -> void:
 	var cell_grid := _navigation_field.cell_grid_get()
 	for agent in _agents:
 		NavigationField.agent_enter(agent, cell_grid)
-		NavigationField.agent_force_move(agent, _dt_)
-		NavigationField.agent_force_obstacle(cell_grid, _agents, agent.index, _obstacles, _dt_)
+		NavigationField.agent_move(agent, _dt_)
+		NavigationField.agent_avoid_obstacle(cell_grid, _agents, agent.index, _obstacles, _dt_)
 	for agent in _agents:
-		NavigationField.agent_force_other(cell_grid, _agents, agent.index, _dt_)
-		NavigationField.agent_move(agent, cell_grid, _dt_)
+		NavigationField.agent_avoid_other(cell_grid, _agents, agent.index, _dt_)
 
 func _physics_process(_dt_: float) -> void:
 	_self_camera.physics_process(_dt_)
@@ -166,12 +166,18 @@ func _physics_process(_dt_: float) -> void:
 		for i in _agents.size():
 			_agents[i].copy_stat(_agents_local[i])
 			_agents[i].copy_transform(_agents_local[i])
-			_agents[i].copy_target(_agents_local[i])
+		if _agents_target_changed:
+			for i in _agents.size():
+				_agents[i].copy_target(_agents_local[i])
+			_agents_target_changed = false
 		var task := ThreadManager.do(self, _agents_process.bind(dt), true)
 		if task != null:
 			await task.done
 			for i in _agents.size():
 				_agents_local[i].copy_transform(_agents[i])
+			if not _agents_target_changed:
+				for i in _agents.size():
+					_agents_local[i].copy_target(_agents[i])
 		_physics_time_sec_last = Global.physics_time_sec()
 
 func _process(_dt_: float) -> void:
@@ -243,19 +249,31 @@ func _input(_event_: InputEvent) -> void:
 			match mouse.button_index:
 				MOUSE_BUTTON_RIGHT:
 					for agent_local in _agents_local:
+						var state := 0
 						if _self_mouse.agent_index != -1:
 							if agent_local.index == _self_mouse.agent_index:
 								agent_local.target = p_local
 								agent_local.target_ing = true
-								break
+								state = 1
 						else:
 							agent_local.target = p_local
 							agent_local.target_ing = true
+							state = 2
+						if state == 1 or state == 2:
+							Helper.debug_draw_line(
+								Vector3(agent_local.position.x, 0.1, agent_local.position.y) + _navigation_field.cell_grid_get().debug_offset,
+								p + _navigation_field.cell_grid_get().debug_offset,
+								0.01,
+								Color.GREEN
+							)
+						if state == 1:
+							break
+					_agents_target_changed = true
 					var cell := _navigation_field.cell_grid_get().cell_nearest_get(p_local)
 					if cell == null or cell.cost == NavigationField.Cell.Cost.WALL:
 						return
 					var destinations: Array[int] = [cell.index]
-					var task := ThreadManager.do(_navigation_field, _navigation_field.cell_grid_get().calculate.bind(destinations.duplicate()))
+					var task := ThreadManager.do(_navigation_field, _navigation_field.cell_grid_get().calculate_flow_field.bind(destinations.duplicate()))
 					if task != null:
 						await task.done
 						_navigation_field.debug_update(true, _navigation_field_debug_vector)
