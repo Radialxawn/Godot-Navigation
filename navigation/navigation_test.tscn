@@ -139,7 +139,7 @@ offset_bottom = -21.0
 grow_vertical = 0
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 12
-text = "Left click spawn %d (C to change), right click move, S change agent, D kill %d agent."
+text = "S spawn %d (C to change), right click move, left mouse drag select agents, D delete agents."
 
 [node name="debug" type="Label" parent="ui"]
 layout_mode = 1
