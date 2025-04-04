@@ -87,7 +87,7 @@ func _physics_process(_dt_: float) -> void:
 	if _self_mouse.left_down:
 		_input_left_mouse_motion(Engine.get_physics_frames() % 2 == 0, false)
 	_self_camera.physics_process(_dt_)
-	if _agents.size() == _view_agents.multimesh.instance_count:
+	if _agents_spawn_state == 0 and _agents_kill_state == 0:
 		var time_sec := Global.time_sec()
 		var tf_base := Transform3D.IDENTITY.translated_local(_navigation_field.position)
 		var i := 0
@@ -193,14 +193,15 @@ func _agents_kill_task(_agents_id_: Array[int]) -> void:
 
 var _agents_kill_state: int
 func _agents_kill(_agents_id_: Array[int]) -> void:
+	var kill_count := _agents_id_.size()
+	if kill_count == 0:
+		return
 	if _agents_kill_state == 1 or _agents_kill_state == 2:
 		return
 	if _agents_kill_state == 0:
 		_agents_kill_state = 1
 	while _agents_kill_state == 1:
-		var kill_count := _agents_id_.size()
-		if kill_count == 0:
-			return
+		
 		if not ThreadManager.doable(self):
 			await get_tree().process_frame
 			continue
