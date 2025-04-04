@@ -171,7 +171,6 @@ func _agents_spawn(_position_local_: Vector2, _count_: int) -> void:
 		for i in agents_spawn_count:
 			var agent_id := _agents_id_next - i - 1
 			var agent := _agents[agent_id]
-			agent.id = agent_id
 			agent.radius = randi_range(40, 50) * 0.005
 			@warning_ignore("integer_division")
 			agent.position = Vector2(
