@@ -33,7 +33,7 @@ func position_set(_position_: Vector3, _anchor_: Vector2) -> void:
 		_position_.y,
 		_position_.z - _cell_grid.bound.min_y - _anchor_.y * _cell_grid.bound.y,
 	)
-	_cell_grid.debug_offset = position
+	_cell_grid.debug_offset = global_position
 
 static func _agent_neighbors_id_get(_cell_grid_: CellGrid, _agents_: Dictionary[int, Agent], _agent_id_: int) -> int:
 	var agent := _agents_[_agent_id_]
