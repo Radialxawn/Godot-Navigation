@@ -149,8 +149,8 @@ func _agents_process(_dt_: float) -> void:
 
 func _agents_spawn_task(_count_: int) -> void:
 	for i in _count_:
-		_agents[_agents_id_next] = NavigationField.Agent.new()
-		_agents_local[_agents_id_next] = NavigationField.Agent.new()
+		_agents[_agents_id_next] = NavigationField.Agent.new(_agents_id_next)
+		_agents_local[_agents_id_next] = NavigationField.Agent.new(_agents_id_next)
 		_agents_id_next += 1
 
 var _agents_spawn_state: int

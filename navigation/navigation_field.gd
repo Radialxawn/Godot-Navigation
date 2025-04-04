@@ -434,8 +434,9 @@ class Agent extends RefCounted:
 	var target_near: bool
 	var target_near_sub: bool
 	var cell_id: int
-	var neighbors_id: PackedInt32Array
-	func _init() -> void:
+	var neighbors_id: PackedInt64Array
+	func _init(_id_: int) -> void:
+		id = _id_
 		cell_id = -1
 		neighbors_id.resize(32)
 	func copy_transform(_from_: Agent) -> void:
