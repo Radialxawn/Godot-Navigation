@@ -8,13 +8,12 @@ extends Node
 
 var _manual_boid_text_base: String
 
-var _navigation_field: NavigationField
-var _agents: Dictionary[int, NavigationField.Agent]
-var _agents_local: Dictionary[int, NavigationField.Agent]
-var _agents_target_changed: bool
-var _agents_id_next: int
-var _obstacles: Array[NavigationField.Obstacle]
 var _physics_time_sec_last: float
+var _navigation_field: NavigationField
+var _obstacles: Array[NavigationField.Obstacle]
+var _agents: Dictionary[int, NavigationField.Agent] # pass this over other thread
+var _agents_local: Dictionary[int, NavigationField.Agent] # this is for local manipulation
+var _agents_id_next: int
 var _input_ready: bool
 
 class SelfCamera extends RefCounted:
@@ -54,8 +53,9 @@ class SelfMouse extends RefCounted:
 	var left_down_position_world: Vector3
 	var middle_down: bool
 	var middle_cell_id: int
-	var spawn_count: int
-	var agents_id: Array[int]
+	var agents_spawn_count: int
+	var agents_id: Dictionary[int, bool]
+	var agents_target_changed: bool
 var _self_mouse: SelfMouse
 
 func _ready() -> void:
@@ -83,63 +83,6 @@ func _ready() -> void:
 	_navigation_field.debug_update()
 	_input_ready = true
 
-func _agents_spawn_task(_count_: int) -> void:
-	for i in _count_:
-		_agents[_agents_id_next] = NavigationField.Agent.new()
-		_agents_local[_agents_id_next] = NavigationField.Agent.new()
-		_agents_id_next += 1
-
-func _agents_spawn(_position_local_: Vector2, _count_: int) -> void:
-	var spawn_count := _self_mouse.spawn_count
-	var spread := ceili(sqrt(spawn_count))
-	var task := ThreadManager.do(self, _agents_spawn_task.bind(_count_), true)
-	if task != null:
-		print("Spawn %d agent." % [_count_])
-		await task.done
-		for i in spawn_count:
-			var agent_id := _agents_id_next - i - 1
-			var agent := _agents[agent_id]
-			agent.id = agent_id
-			agent.radius = randi_range(40, 50) * 0.005
-			@warning_ignore("integer_division")
-			agent.position = Vector2(
-				_position_local_.x + (i / spread) * 0.3,
-				_position_local_.y + (i % spread) * 0.3
-			)
-			agent.position_speed_max = randi_range(20, 30) * 0.1
-			agent.rotation_speed_max = randi_range(20, 30) * 0.1 * PI
-			agent.acceleration = randi_range(15, 20) * 0.1
-			_agents_local[agent_id].copy_stat(agent)
-			_agents_local[agent_id].copy_transform(agent)
-		_view_agents.multimesh.instance_count = _agents.size()
-
-func _agents_kill_task(_agents_id_: Array[int]) -> void:
-	for agent_id: int in _agents_id_:
-		NavigationField.agent_exit(_agents[agent_id], _navigation_field.cell_grid_get())
-		_agents.erase(agent_id)
-		_agents_local.erase(agent_id)
-
-func _agents_kill(_agents_id_: Array[int]) -> void:
-	var kill_count := _agents_id_.size()
-	if kill_count == 0:
-		return
-	var count_after := _agents.size() - kill_count
-	var task := ThreadManager.do(self, _agents_kill_task.bind(_agents_id_.duplicate()), true)
-	if task != null:
-		print("Kill %d agent." % [kill_count])
-		await task.done
-		_self_mouse.agents_id.clear()
-		_view_agents.multimesh.instance_count = count_after
-
-func _agents_process(_dt_: float) -> void:
-	var cell_grid := _navigation_field.cell_grid_get()
-	for agent: NavigationField.Agent in _agents.values():
-		NavigationField.agent_enter(agent, cell_grid)
-		NavigationField.agent_move(agent, _dt_)
-		NavigationField.agent_avoid_obstacle(cell_grid, _agents, agent.id, _obstacles, _dt_)
-	for agent: NavigationField.Agent in _agents.values():
-		NavigationField.agent_avoid_other(cell_grid, _agents, agent.id, _dt_)
-
 func _physics_process(_dt_: float) -> void:
 	if _self_mouse.left_down:
 		_input_left_mouse_motion(Engine.get_physics_frames() % 2 == 0, false)
@@ -148,7 +91,7 @@ func _physics_process(_dt_: float) -> void:
 		var time_sec := Global.time_sec()
 		var tf_base := Transform3D.IDENTITY.translated_local(_navigation_field.position)
 		var i := 0
-		for agent_local_id: int in _agents_local.keys():
+		for agent_local_id: int in _agents_local:
 			var agent_local := _agents_local[agent_local_id]
 			var view_radius := agent_local.radius * 2.0
 			var tf := (tf_base
@@ -156,7 +99,7 @@ func _physics_process(_dt_: float) -> void:
 				.rotated_local(Vector3.UP, -agent_local.rotation + PI * 0.5)
 				.scaled_local(Vector3(view_radius, view_radius, view_radius))
 			)
-			var selected := agent_local.id in _self_mouse.agents_id
+			var selected := _self_mouse.agents_id.has(agent_local.id)
 			var gray := 1.0 if selected else 0.0
 			var flick := pingpong(time_sec, 0.5) if selected else 0.0
 			var gray_flick := gray + flick
@@ -172,18 +115,16 @@ func _physics_process(_dt_: float) -> void:
 		for agent: NavigationField.Agent in _agents.values():
 			agent.copy_stat(_agents_local[agent.id])
 			agent.copy_transform(_agents_local[agent.id])
-		if _agents_target_changed:
-			for agent: NavigationField.Agent in _agents.values():
-				agent.copy_target(_agents_local[agent.id])
-			_agents_target_changed = false
-		var task := ThreadManager.do(self, _agents_process.bind(dt), true)
-		if task != null:
-			await task.done
-			for agent_local: NavigationField.Agent in _agents_local.values():
-				agent_local.copy_transform(_agents[agent_local.id])
-			if not _agents_target_changed:
-				for agent_local: NavigationField.Agent in _agents_local.values():
-					agent_local.copy_target(_agents[agent_local.id])
+		if _self_mouse.agents_target_changed:
+			for agent_id: int in _self_mouse.agents_id:
+				_agents[agent_id].copy_target(_agents_local[agent_id])
+			_self_mouse.agents_target_changed = false
+		await ThreadManager.do(self, _agents_process.bind(dt), true).done
+		for agent_local: NavigationField.Agent in _agents_local.values():
+			agent_local.copy_transform(_agents[agent_local.id])
+		if not _self_mouse.agents_target_changed:
+			for agent_id: int in _self_mouse.agents_id:
+				_agents_local[agent_id].copy_target(_agents[agent_id])
 		_physics_time_sec_last = Global.physics_time_sec()
 
 func _process(_dt_: float) -> void:
@@ -193,17 +134,85 @@ func _process(_dt_: float) -> void:
 		Performance.get_monitor(Performance.MEMORY_STATIC) * 1e-6,
 		]
 	_self_mouse.position = get_viewport().get_mouse_position()
-	_self_mouse.position_world = _screen_position_to_world_position(_self_camera.camera, _self_mouse.position)
+	_self_mouse.position_world = Math.screen_position_project_on_plane(_self_camera.camera, _self_mouse.position, Vector3.ZERO, Vector3.UP)
 	_self_camera.update_view(_self_mouse.position)
 
-static func _screen_position_to_world_position(_camera_: Camera3D, _screen_position_: Vector2) -> Vector3:
-	var ro := _camera_.project_position(_screen_position_, 1.0)
-	var ru := ro.direction_to(_camera_.project_position(_screen_position_, 100.0))
-	var pn := Vector3.UP
-	var pp := Vector3.ZERO
-	var ro_pp := pp - ro
-	var enter := ro_pp.length() * (ro_pp.normalized().dot(pn) / ru.dot(pn))
-	return ro + enter * ru
+#region Agents
+func _agents_process(_dt_: float) -> void:
+	var cell_grid := _navigation_field.cell_grid_get()
+	for agent: NavigationField.Agent in _agents.values():
+		NavigationField.agent_enter(agent, cell_grid)
+		NavigationField.agent_move(agent, _dt_)
+		NavigationField.agent_avoid_obstacle(cell_grid, _agents, agent.id, _obstacles, _dt_)
+	for agent: NavigationField.Agent in _agents.values():
+		NavigationField.agent_avoid_other(cell_grid, _agents, agent.id, _dt_)
+
+func _agents_spawn_task(_count_: int) -> void:
+	for i in _count_:
+		_agents[_agents_id_next] = NavigationField.Agent.new()
+		_agents_local[_agents_id_next] = NavigationField.Agent.new()
+		_agents_id_next += 1
+
+var _agents_spawn_state: int
+func _agents_spawn(_position_local_: Vector2, _count_: int) -> void:
+	if _agents_spawn_state == 1 or _agents_spawn_state == 2:
+		return
+	if _agents_spawn_state == 0:
+		_agents_spawn_state = 1
+	while _agents_spawn_state == 1:
+		if not ThreadManager.doable(self):
+			await get_tree().process_frame
+			continue
+		_agents_spawn_state = 2
+		var agents_spawn_count := _self_mouse.agents_spawn_count
+		var spread := ceili(sqrt(agents_spawn_count))
+		print("Spawn %d agent." % [_count_])
+		await ThreadManager.do(self, _agents_spawn_task.bind(_count_), true).done
+		for i in agents_spawn_count:
+			var agent_id := _agents_id_next - i - 1
+			var agent := _agents[agent_id]
+			agent.id = agent_id
+			agent.radius = randi_range(40, 50) * 0.005
+			@warning_ignore("integer_division")
+			agent.position = Vector2(
+				_position_local_.x + (i / spread) * 0.3,
+				_position_local_.y + (i % spread) * 0.3
+			)
+			agent.position_speed_max = randi_range(20, 30) * 0.1
+			agent.rotation_speed_max = randi_range(20, 30) * 0.1 * PI
+			agent.acceleration = randi_range(15, 20) * 0.1
+			_agents_local[agent_id].copy_stat(agent)
+			_agents_local[agent_id].copy_transform(agent)
+		_view_agents.multimesh.instance_count = _agents.size()
+		_agents_spawn_state = 0
+
+func _agents_kill_task(_agents_id_: Array[int]) -> void:
+	for agent_id: int in _agents_id_:
+		NavigationField.agent_exit(_agents[agent_id], _navigation_field.cell_grid_get())
+		_agents.erase(agent_id)
+		_agents_local.erase(agent_id)
+
+var _agents_kill_state: int
+func _agents_kill(_agents_id_: Array[int]) -> void:
+	if _agents_kill_state == 1 or _agents_kill_state == 2:
+		return
+	if _agents_kill_state == 0:
+		_agents_kill_state = 1
+	while _agents_kill_state == 1:
+		var kill_count := _agents_id_.size()
+		if kill_count == 0:
+			return
+		if not ThreadManager.doable(self):
+			await get_tree().process_frame
+			continue
+		_agents_kill_state = 2
+		var count_after := _agents.size() - kill_count
+		print("Kill %d agent." % [kill_count])
+		await ThreadManager.do(self, _agents_kill_task.bind(_agents_id_.duplicate()), true).done
+		_self_mouse.agents_id.clear()
+		_view_agents.multimesh.instance_count = count_after
+		_agents_kill_state = 0
+#endregion
 
 #region Input
 func _input(_event_: InputEvent) -> void:
@@ -227,11 +236,11 @@ func _input_change_spawn_count() -> void:
 	var counts: Array[int] = [1, 10, 50, 100]
 	var count_id := 0
 	for i in counts.size():
-		if _self_mouse.spawn_count == counts[i]:
+		if _self_mouse.agents_spawn_count == counts[i]:
 			count_id = (i + 1) % counts.size()
 			break
-	_self_mouse.spawn_count = counts[count_id]
-	_manual_agent.text = _manual_boid_text_base % [_self_mouse.spawn_count]
+	_self_mouse.agents_spawn_count = counts[count_id]
+	_manual_agent.text = _manual_boid_text_base % [_self_mouse.agents_spawn_count]
 
 func _input_middle_mouse_motion() -> void:
 	var p := _navigation_field.to_local(_self_mouse.position_world)
@@ -245,29 +254,31 @@ func _input_middle_mouse_motion() -> void:
 		_navigation_field.debug_update()
 		_self_mouse.middle_cell_id = cell.id
 
+static func _debug_draw_rectangle(_a_: Vector3, _b_: Vector3, _stroke_size_: float, _color_: Color) -> void:
+	var diagonal := _b_ - _a_
+	var c := Vector3(_a_.x, _a_.y, _a_.z + diagonal.z)
+	var d := Vector3(_a_.x + diagonal.x, _a_.y, _a_.z)
+	Helper.debug_draw_line(_a_, c, _stroke_size_, _color_);
+	Helper.debug_draw_line(_b_, c, _stroke_size_, _color_);
+	Helper.debug_draw_line(_a_, d, _stroke_size_, _color_);
+	Helper.debug_draw_line(_b_, d, _stroke_size_, _color_);
+
 func _input_left_mouse_motion(_process_select_: bool, _debug_print_: bool) -> void:
 	var corner_a := _self_mouse.left_down_position_world
 	var corner_b := _self_mouse.position_world
-	var diagonal := corner_b - corner_a
-	var corner_c := Vector3(corner_a.x, corner_a.y, corner_a.z + diagonal.z)
-	var corner_d := Vector3(corner_a.x + diagonal.x, corner_a.y, corner_a.z)
-	Helper.debug_draw_line(corner_a, corner_c, 0.02, Color.RED);
-	Helper.debug_draw_line(corner_b, corner_c, 0.02, Color.RED);
-	Helper.debug_draw_line(corner_a, corner_d, 0.02, Color.RED);
-	Helper.debug_draw_line(corner_b, corner_d, 0.02, Color.RED);
+	_debug_draw_rectangle(corner_a, corner_b, 0.02, Color.GREEN)
 	if not _process_select_:
 		return
 	var bound := _navigation_field.cell_grid_get().bound
-	var kd_tree := KDTree.new(KDTree.Rectangle.new(0.0, 0.0, bound.x, bound.y), 4)
+	var quad_tree := QuadTree.new(QuadTree.Rectangle.new(bound.min_x, bound.min_y, bound.x, bound.y), 4)
 	for agent_local: NavigationField.Agent in _agents_local.values():
-		kd_tree.insert(KDTree.Point.new(agent_local.id, agent_local.position.x, agent_local.position.y))
+		quad_tree.insert(QuadTree.Point.new(agent_local.id, agent_local.position.x, agent_local.position.y))
 	var corner_a_local := _navigation_field.to_local(corner_a)
 	var corner_b_local := _navigation_field.to_local(corner_b)
-	var rectangle := KDTree.Rectangle.from_two_point(Vector2(corner_a_local.x, corner_a_local.z), Vector2(corner_b_local.x, corner_b_local.z))
+	var rectangle := QuadTree.Rectangle.from_two_point(Vector2(corner_a_local.x, corner_a_local.z), Vector2(corner_b_local.x, corner_b_local.z))
 	_self_mouse.agents_id.clear()
-	if kd_tree.query(rectangle, _self_mouse.agents_id) and _debug_print_:
-		if _self_mouse.agents_id.size() > 0:
-			print("%d agents selected" % _self_mouse.agents_id.size())
+	if quad_tree.query(rectangle, _self_mouse.agents_id) and _debug_print_:
+		print("%d agents selected" % _self_mouse.agents_id.size())
 
 func _input_key_released(_key_code_: int) -> void:
 	match _key_code_:
@@ -281,9 +292,9 @@ func _input_key_released(_key_code_: int) -> void:
 			_self_camera.update_view(_self_mouse.position)
 		KEY_S:
 			var p := _navigation_field.to_local(_self_mouse.position_world)
-			_agents_spawn(Vector2(p.x, p.z), _self_mouse.spawn_count)
+			_agents_spawn(Vector2(p.x, p.z), _self_mouse.agents_spawn_count)
 		KEY_D:
-			_agents_kill(_self_mouse.agents_id)
+			_agents_kill(_self_mouse.agents_id.keys())
 
 func _input_mouse_button_pressed(_mouse_: InputEventMouseButton) -> void:
 	var p := _navigation_field.to_local(_self_mouse.position_world)
@@ -293,18 +304,18 @@ func _input_mouse_button_pressed(_mouse_: InputEventMouseButton) -> void:
 			_self_mouse.left_down_position_world = _self_mouse.position_world
 			_self_mouse.left_down = true
 		MOUSE_BUTTON_RIGHT:
-			for agent_local: NavigationField.Agent in _agents_local.values():
-				if _self_mouse.agents_id.size() > 0 and agent_local.id not in _self_mouse.agents_id:
-					continue
-				agent_local.target = p_grid
-				agent_local.target_ing = true
-				Helper.debug_draw_line(
-					Vector3(agent_local.position.x, 0.1, agent_local.position.y) + _navigation_field.cell_grid_get().debug_offset,
-					p + _navigation_field.cell_grid_get().debug_offset,
-					0.01,
-					Color.GREEN
-				)
-			_agents_target_changed = true
+			if _self_mouse.agents_id.size() > 0:
+				for agent_id: int in _self_mouse.agents_id:
+					var agent_local := _agents_local[agent_id]
+					agent_local.target = p_grid
+					agent_local.target_ing = true
+					Helper.debug_draw_line(
+						Vector3(agent_local.position.x, 0.1, agent_local.position.y) + _navigation_field.cell_grid_get().debug_offset,
+						p + _navigation_field.cell_grid_get().debug_offset,
+						0.01,
+						Color.GREEN
+					)
+				_self_mouse.agents_target_changed = true
 			var cell := _navigation_field.cell_grid_get().cell_nearest_get(p_grid)
 			if cell == null or cell.cost == NavigationField.Cell.Cost.WALL:
 				return

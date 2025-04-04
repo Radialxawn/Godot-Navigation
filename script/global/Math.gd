@@ -30,6 +30,16 @@ static func get_perpendicular_vector(_u_: Vector3) -> Vector3:
 		-copy_signf(_u_.x, _u_.z) - copy_signf(_u_.y, _u_.z)
 	)
 
+static func screen_position_project_on_plane(_camera_: Camera3D, _screen_position_: Vector2, _plane_point_: Vector3, _plane_normal_: Vector3) -> Vector3:
+	var ray_origin := _camera_.project_position(_screen_position_, 1.0)
+	var ray_direction := _camera_.project_ray_normal(_screen_position_)
+	var delta := _plane_point_ - ray_origin
+	var ray_dot_plane := ray_direction.dot(_plane_normal_)
+	if ray_dot_plane == 0.0:
+		return _plane_point_
+	var enter := delta.length() * (delta.normalized().dot(_plane_normal_) / ray_dot_plane)
+	return ray_origin + enter * ray_direction
+
 class SecondOrderDynamics extends RefCounted:
 	var xp: Vector3
 	var y: Vector3 

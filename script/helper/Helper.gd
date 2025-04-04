@@ -51,7 +51,7 @@ func debug_draw_sphere(_position_: Vector3, _radius_: float, _color_: Color) -> 
 	)
 	debug_shape_sphere.colors.append(_color_)
 
-func debug_draw_line(_from_: Vector3, _to_: Vector3, _size_: float, _color_: Color) -> void:
+func debug_draw_line(_from_: Vector3, _to_: Vector3, _stroke_size_: float, _color_: Color) -> void:
 	var center := (_from_ + _to_) * 0.5
 	var delta := _to_ - _from_
 	if delta.length_squared() < 1e-6:
@@ -59,7 +59,7 @@ func debug_draw_line(_from_: Vector3, _to_: Vector3, _size_: float, _color_: Col
 	var line_transform := (Transform3D.IDENTITY
 		.translated(center)
 		.looking_at(_to_, Math.get_perpendicular_vector(delta))
-		.scaled_local(Vector3(_size_, _size_, _from_.distance_to(_to_)))
+		.scaled_local(Vector3(_stroke_size_, _stroke_size_, _from_.distance_to(_to_)))
 	)
 	_debug_shape_line.transforms.append(line_transform)
 	_debug_shape_line.colors.append(_color_)

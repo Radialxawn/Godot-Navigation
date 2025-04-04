@@ -72,7 +72,8 @@ static func agent_move(_agent_: Agent, _dt_: float) -> void:
 		var delta := _agent_.target - _agent_.position
 		var delta_length := delta.length()
 		_agent_.target_near = delta_length < _agent_.radius
-		if _agent_.target_near: # stop when near target
+		if _agent_.target_near or _agent_.target_near_sub: # stop when near target
+			_agent_.target_near_sub = false
 			_agent_.speed_factor = 0.0
 		else:
 			if _agent_.safe_direction.length_squared() > 0.0: # have safe direction, move along the safe direction
@@ -121,7 +122,7 @@ static func agent_avoid_obstacle(_cell_grid_: CellGrid, _agents_: Dictionary[int
 	if field_t <= 0.0:
 		force_obstacle.y += field_t
 	agent.force_obstacle = force_obstacle
-	if force_obstacle.x != 0.0 and force_obstacle.y != 0.0:
+	if force_obstacle.x != 0.0 or force_obstacle.y != 0.0:
 		agent.position_predict += force_obstacle
 
 static func agent_avoid_other(_cell_grid_: CellGrid, _agents_: Dictionary[int, Agent], _agent_id_: int, _dt_: float) -> void:
@@ -132,8 +133,8 @@ static func agent_avoid_other(_cell_grid_: CellGrid, _agents_: Dictionary[int, A
 	var obstacle_normal := agent.force_obstacle.normalized()
 	var sight := Sight.new(agent.position, agent.rotation, obstacle_normal)
 	var ray_hit := RayHit.new()
-	var ray_target_hit_obstacle := agent.target_ing and agent.position.direction_to(agent.target).dot(obstacle_normal) < -0.5
-	var ray_hit_any := ray_target_hit_obstacle
+	var direction_to_target_hit_obstacle := agent.target_ing and agent.position.direction_to(agent.target).dot(obstacle_normal) < -0.5
+	var ray_hit_any := direction_to_target_hit_obstacle
 	var predict_distance := agent.position.distance_to(agent.position_predict)
 	var ray_hit_min_distance: float = predict_distance
 	for i: int in neighbors_count:
@@ -157,21 +158,18 @@ static func agent_avoid_other(_cell_grid_: CellGrid, _agents_: Dictionary[int, A
 				if ray_hit.distance < ray_hit_min_distance:
 					ray_hit_any = true
 					ray_hit_min_distance = ray_hit.distance
-		if agent.target_ing and agent_other.target_ing and agent.target.distance_squared_to(agent_other.target) < delta_length_min: # same target
-			if agent_other.target_near:
-				# find a way to turn off all agent.target_ing
-				agent.target_ing = false
-				agent.speed_factor = 0.0
+			if agent.target_ing and agent_other.target_ing and agent.target.distance_squared_to(agent_other.target) < delta_length_min_sq: # same target
+				if agent_other.target_near or agent_other.target_near_sub: # stop when this agent is near an arrived agent
+					agent.target_near_sub = true
+					agent.speed_factor = 0.0
 	if ray_hit_any:
-		if ray_hit_min_distance < predict_distance or ray_target_hit_obstacle:
+		if ray_hit_min_distance < predict_distance or direction_to_target_hit_obstacle:
 			if sight.safe_direction_get(): # there is a safe direction nearest to target direction
 				agent.safe_direction = sight.safe_direction
 				#agent.debug_draw_ray(agent.safe_direction, _cell_grid_.debug_offset, Color.GREEN)
 			else: # no way to move
 				agent.speed_factor = 0.0
 				#Helper.debug_draw_sphere.call_deferred(Vector3(agent.position.x, 0.0, agent.position.y) + _cell_grid_.debug_offset, agent.radius, Color.BLACK)
-	if agent.target_ing:
-		Helper.debug_draw_sphere.call_deferred(Vector3(agent.position.x, 0.0, agent.position.y) + _cell_grid_.debug_offset, agent.radius, Color.PURPLE)
 	if agent.force_obstacle.length_squared() > 0.0: # if there is obstacle, project force to prevent object clipping
 		if force_other.dot(agent.force_obstacle) < 0.0:
 			var u := agent.force_obstacle.normalized()
@@ -434,6 +432,7 @@ class Agent extends RefCounted:
 	var target: Vector2
 	var target_ing: bool
 	var target_near: bool
+	var target_near_sub: bool
 	var cell_id: int
 	var neighbors_id: PackedInt32Array
 	func _init() -> void:

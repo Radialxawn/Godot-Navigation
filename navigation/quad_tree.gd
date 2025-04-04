@@ -1,4 +1,4 @@
-class_name KDTree
+class_name QuadTree
 extends RefCounted
 
 class Point extends RefCounted:
@@ -10,7 +10,7 @@ class Point extends RefCounted:
 		x = _x_
 		y = _y_
 
-## This rectangle position is not at center but at top left corner
+## This rectangle anchor is not at center but at top left corner
 class Rectangle extends RefCounted:
 	var x: float
 	var y: float
@@ -38,10 +38,10 @@ var bound: Rectangle
 var capacity: int
 var points: Array[Point]
 var divided: bool
-var top_l: KDTree
-var top_r: KDTree
-var bot_l: KDTree
-var bot_r: KDTree
+var top_l: QuadTree
+var top_r: QuadTree
+var bot_l: QuadTree
+var bot_r: QuadTree
 
 func _init(_bound_: Rectangle, _capacity_: int) -> void:
 	bound = _bound_
@@ -54,10 +54,10 @@ func _subdivide() -> void:
 	var y := bound.y
 	var wh := bound.w * 0.5
 	var hh := bound.h * 0.5
-	top_l = KDTree.new(Rectangle.new(x, y, wh, hh), capacity)
-	top_r = KDTree.new(Rectangle.new(x + wh, y, wh, hh), capacity)
-	bot_l = KDTree.new(Rectangle.new(x, y + hh, wh, hh), capacity)
-	bot_r = KDTree.new(Rectangle.new(x + wh, y + hh, wh, hh), capacity)
+	top_l = QuadTree.new(Rectangle.new(x, y, wh, hh), capacity)
+	top_r = QuadTree.new(Rectangle.new(x + wh, y, wh, hh), capacity)
+	bot_l = QuadTree.new(Rectangle.new(x, y + hh, wh, hh), capacity)
+	bot_r = QuadTree.new(Rectangle.new(x + wh, y + hh, wh, hh), capacity)
 	divided = true
 
 func insert(_point_: Point) -> bool:
@@ -79,16 +79,16 @@ func insert(_point_: Point) -> bool:
 		return true
 	return false
 
-func query(_range_: Rectangle, _found_: Array[int]) -> bool:
+func query(_range_: Rectangle, _found_id_: Dictionary[int, bool]) -> bool:
 	if not bound.intersect(_range_):
 		return false
 	else:
 		for p: Point in points:
 			if _range_.contain(p):
-				_found_.append(p.id);
+				_found_id_[p.id] = true;
 	if divided:
-		top_r.query(_range_, _found_)
-		top_l.query(_range_, _found_)
-		bot_r.query(_range_, _found_)
-		bot_l.query(_range_, _found_)
-	return _found_.size() > 0
+		top_r.query(_range_, _found_id_)
+		top_l.query(_range_, _found_id_)
+		bot_r.query(_range_, _found_id_)
+		bot_l.query(_range_, _found_id_)
+	return _found_id_.size() > 0
