@@ -75,11 +75,11 @@ func _ready() -> void:
 	_self_camera = SelfCamera.new($camera)
 	_manual_boid_text_base = _manual_agent.text
 	_input_change_spawn_count()
-	_input_ready = false
-	for i in 2: await get_tree().process_frame
 	_navigation_field.debug_cell = true
 	_navigation_field.debug_cell_vector = false
 	_navigation_field.cell_grid_get().calculate_flow_field([0])
+	_input_ready = false
+	await get_tree().process_frame
 	_navigation_field.debug_update()
 	_input_ready = true
 
