@@ -20,7 +20,7 @@ class _FromTo extends RefCounted:
 			from_to.reverse()
 			valid = true
 		else:
-			valid = false # now only sync from navigation project to main project
+			valid = true
 		from = from_to[0]
 		to = from_to[1]
 		folder_global_target = folder_global.replace(from, to)

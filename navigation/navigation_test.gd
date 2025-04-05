@@ -79,7 +79,7 @@ func _ready() -> void:
 	_navigation_field.debug_cell_vector = false
 	_navigation_field.cell_grid_get().calculate_flow_field([0])
 	_input_ready = false
-	await get_tree().process_frame
+	for i in 2: await get_tree().process_frame
 	_navigation_field.debug_update()
 	_input_ready = true
 
