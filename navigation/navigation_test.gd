@@ -10,7 +10,7 @@ var _manual_boid_text_base: String
 
 var _physics_time_sec_last: float
 var _navigation_field: NavigationField
-var _obstacles: Array[NavigationField.Obstacle]
+var _obstacles: Dictionary[int, NavigationField.Obstacle]
 var _agents: Dictionary[int, NavigationField.Agent] # pass this over other thread
 var _agents_local: Dictionary[int, NavigationField.Agent] # this is for local manipulation
 var _agents_id_next: int
@@ -65,12 +65,13 @@ func _ready() -> void:
 	_view_agents.multimesh.mesh = ($view_agents/creep_1/body as MeshInstance3D).mesh
 	for child in _obstacles_node.get_children():
 		var collider := child as CollisionShape3D
+		var id := collider.get_instance_id()
 		if collider.shape is SphereShape3D:
-			_obstacles.append(NavigationField.ObstacleCircle.new(_obstacles.size(), _navigation_field, collider))
+			_obstacles[id] = NavigationField.ObstacleCircle.new(id, _navigation_field, collider)
 		elif collider.shape is CapsuleShape3D:
-			_obstacles.append(NavigationField.ObstacleCapsule.new(_obstacles.size(), _navigation_field, collider))
+			_obstacles[id] = NavigationField.ObstacleCapsule.new(id, _navigation_field, collider)
 		elif collider.shape is BoxShape3D:
-			_obstacles.append(NavigationField.ObstacleRectangle.new(_obstacles.size(), _navigation_field, collider))
+			_obstacles[id] = NavigationField.ObstacleRectangle.new(id, _navigation_field, collider)
 	_self_mouse = SelfMouse.new()
 	_self_camera = SelfCamera.new($camera)
 	_manual_boid_text_base = _manual_agent.text

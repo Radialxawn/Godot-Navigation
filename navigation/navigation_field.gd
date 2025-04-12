@@ -93,7 +93,7 @@ static func agent_move(_agent_: Agent, _dt_: float) -> void:
 	_agent_.rotation_predict = rotation_predict
 	_agent_.position_predict = position_predict
 
-static func agent_avoid_obstacle(_cell_grid_: CellGrid, _agents_: Dictionary[int, Agent], _agent_id_: int, _obstacles_: Array[Obstacle], _dt_: float) -> void:
+static func agent_avoid_obstacle(_cell_grid_: CellGrid, _agents_: Dictionary[int, Agent], _agent_id_: int, _obstacles_: Dictionary[int, Obstacle], _dt_: float) -> void:
 	var agent := _agents_[_agent_id_]
 	var distance_hits: Array[DistanceHit]
 	var obstacles_id_visisted: Array[int]
@@ -640,8 +640,11 @@ class ObstacleCircle extends Obstacle:
 	var radius: float
 	func _init(_id_: int, _flow_field_: NavigationField, _collider_: CollisionShape3D) -> void:
 		super._init(_id_, _flow_field_, _collider_)
-		var sphere := _collider_.shape as SphereShape3D
-		radius = sphere.radius
+		if _collider_.shape is SphereShape3D:
+			radius = (_collider_.shape as SphereShape3D).radius
+		elif _collider_.shape is CylinderShape3D:
+			radius = (_collider_.shape as CylinderShape3D).radius
+		assert(radius > 0.0, "Wrong shape")
 		for cell_id in cells_id:
 			var cell := _flow_field_._cell_grid.cell_get(cell_id)
 			if Obstacle.circle_rectangle_overlap(position, radius, cell.position, _flow_field_._cell_grid.cell_size, 0.0):
