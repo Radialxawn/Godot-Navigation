@@ -559,14 +559,18 @@ class Obstacle extends RefCounted:
 	var position: Vector2
 	var rotation: float
 	var cells_id: Array[int]
-	func _init(_id_: int, _flow_field_: NavigationField, _collider_: CollisionShape3D) -> void:
+	func _init(_id_: int, _navigation_field_: NavigationField, _collider_: CollisionShape3D) -> void:
 		id = _id_
-		var position_local := _flow_field_.to_local(_collider_.global_position)
+		var position_local := _navigation_field_.to_local(_collider_.global_position)
 		position = Vector2(position_local.x, position_local.z)
-		var cell_id := _flow_field_._cell_grid.cell_id_nearest_get(_flow_field_._cell_grid.clamp_position(position))
+		var cell_id := _navigation_field_._cell_grid.cell_id_nearest_get(_navigation_field_._cell_grid.clamp_position(position))
 		if cell_id != -1:
 			cells_id.append(cell_id)
-			_flow_field_._cell_grid.cell_group_id_get(cells_id, 2)
+			_navigation_field_._cell_grid.cell_group_id_get(cells_id, 2)
+	func exit(_navigation_field_: NavigationField) -> void:
+		var cell_grid := _navigation_field_.cell_grid_get()
+		for cell_id: int in cells_id:
+			cell_grid.cell_get(cell_id).obstacles_id.erase(id)
 	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
 		return false
 	static func circle_rectangle_overlap(_cp_: Vector2, _cr_: float, _rp_: Vector2, _rs_: Vector2, _r_rad_: float) -> bool:
@@ -638,16 +642,16 @@ class Obstacle extends RefCounted:
 
 class ObstacleCircle extends Obstacle:
 	var radius: float
-	func _init(_id_: int, _flow_field_: NavigationField, _collider_: CollisionShape3D) -> void:
-		super._init(_id_, _flow_field_, _collider_)
+	func _init(_id_: int, _navigation_field_: NavigationField, _collider_: CollisionShape3D) -> void:
+		super._init(_id_, _navigation_field_, _collider_)
 		if _collider_.shape is SphereShape3D:
 			radius = (_collider_.shape as SphereShape3D).radius
 		elif _collider_.shape is CylinderShape3D:
 			radius = (_collider_.shape as CylinderShape3D).radius
 		assert(radius > 0.0, "Wrong shape")
 		for cell_id in cells_id:
-			var cell := _flow_field_._cell_grid.cell_get(cell_id)
-			if Obstacle.circle_rectangle_overlap(position, radius, cell.position, _flow_field_._cell_grid.cell_size, 0.0):
+			var cell := _navigation_field_._cell_grid.cell_get(cell_id)
+			if Obstacle.circle_rectangle_overlap(position, radius, cell.position, _navigation_field_._cell_grid.cell_size, 0.0):
 				cell.obstacles_id.append(id)
 				cell.cost = Cell.Cost.WALL
 	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
@@ -665,16 +669,16 @@ class ObstacleCircle extends Obstacle:
 class ObstacleCapsule extends Obstacle:
 	var radius: float
 	var distance: float
-	func _init(_id_: int, _flow_field_: NavigationField, _collider_: CollisionShape3D) -> void:
-		super._init(_id_, _flow_field_, _collider_)
+	func _init(_id_: int, _navigation_field_: NavigationField, _collider_: CollisionShape3D) -> void:
+		super._init(_id_, _navigation_field_, _collider_)
 		var capsule := _collider_.shape as CapsuleShape3D
 		radius = capsule.radius
 		distance = capsule.height - radius * 2.0
 		var face_local := _collider_.global_transform.basis.x
 		rotation = Vector2(face_local.x, face_local.z).angle() + PI * 0.5
 		for cell_id in cells_id:
-			var cell := _flow_field_._cell_grid.cell_get(cell_id)
-			if Obstacle.capsule_rectangle_overlap(position, radius, distance, rotation, cell.position, _flow_field_._cell_grid.cell_size, 0.0):
+			var cell := _navigation_field_._cell_grid.cell_get(cell_id)
+			if Obstacle.capsule_rectangle_overlap(position, radius, distance, rotation, cell.position, _navigation_field_._cell_grid.cell_size, 0.0):
 				cell.obstacles_id.append(id)
 				cell.cost = Cell.Cost.WALL
 	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
@@ -693,15 +697,15 @@ class ObstacleCapsule extends Obstacle:
 
 class ObstacleRectangle extends Obstacle:
 	var size: Vector2
-	func _init(_id_: int, _flow_field_: NavigationField, _collider_: CollisionShape3D) -> void:
-		super._init(_id_, _flow_field_, _collider_)
+	func _init(_id_: int, _navigation_field_: NavigationField, _collider_: CollisionShape3D) -> void:
+		super._init(_id_, _navigation_field_, _collider_)
 		var box := _collider_.shape as BoxShape3D
 		size = Vector2(box.size.x, box.size.z)
 		var face_local := _collider_.global_transform.basis.x
 		rotation = Vector2(face_local.x, face_local.z).angle()
 		for cell_id in cells_id:
-			var cell := _flow_field_._cell_grid.cell_get(cell_id)
-			if Obstacle.rectangle_rectangle_overlap(position, size, rotation, cell.position, _flow_field_._cell_grid.cell_size, 0.0):
+			var cell := _navigation_field_._cell_grid.cell_get(cell_id)
+			if Obstacle.rectangle_rectangle_overlap(position, size, rotation, cell.position, _navigation_field_._cell_grid.cell_size, 0.0):
 				cell.obstacles_id.append(id)
 				cell.cost = Cell.Cost.WALL
 	func calculate_distance(_position_: Vector2, _radius_: float, _distance_hits_: Array[DistanceHit]) -> bool:
